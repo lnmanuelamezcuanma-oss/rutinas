@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mi rutina</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{--bg:#eceef1;--pn:#fff;--ink:#15171c;--mut:#667085;--ln:#d9dde3;--in:#f5f6f8;--ac:#2f5bff;--bar:#15171c;color-scheme:light}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1115;--pn:#181b21;--ink:#eceef2;--mut:#98a0ad;--ln:#2b303a;--in:#20242c;--bar:#0a0b0e;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1115;--pn:#181b21;--ink:#eceef2;--mut:#98a0ad;--ln:#2b303a;--in:#20242c;--bar:#0a0b0e;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 Barlow,system-ui,sans-serif}
+button,input,select{font:inherit;color:inherit}
+input,select{background:var(--in);border:1px solid var(--ln);border-radius:6px;padding:8px 9px;width:100%;min-width:0}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+button{cursor:pointer;background:var(--pn);border:1px solid var(--ln);border-radius:6px;padding:7px 12px;font-weight:500}
+.pri{background:var(--ac);border-color:var(--ac);color:#fff}
+.top{background:var(--bar);color:#fff;display:flex;gap:10px;align-items:center;padding:10px 16px;flex-wrap:wrap}
+.top h1{flex:1;margin:0;font:700 26px "Barlow Condensed",sans-serif}
+.top button{background:#ffffff14;border-color:#fff3;color:#fff}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.box{background:var(--pn);border:1px solid var(--ln);border-radius:10px;padding:16px;margin-bottom:14px}
+.auth{max-width:420px;margin:7vh auto}
+.auth h1{font:700 34px "Barlow Condensed",sans-serif;margin:0 0 12px}
+.f{display:grid;gap:10px}.f label{font-size:13px;color:var(--mut);display:block;margin-bottom:3px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mut{color:var(--mut);font-size:13px}.err{color:#d6361f;min-height:20px;font-size:14px}
+.adm{display:grid;grid-template-columns:260px 1fr;gap:14px;align-items:start}
+@media(max-width:760px){.adm{grid-template-columns:1fr}}
+.cl{display:block;width:100%;text-align:left;margin-bottom:6px}.cl.on{border-color:var(--ac);box-shadow:inset 4px 0 var(--ac)}
+.day{border:1px solid var(--ln);border-radius:8px;margin-bottom:12px;overflow:hidden;background:var(--pn)}
+.dh{background:var(--bar);color:#fff;padding:8px 12px;border-left:6px solid var(--ac);font:700 21px "Barlow Condensed",sans-serif;display:flex;gap:8px;align-items:center}
+.dh input{background:transparent;border:0;color:#fff;font:inherit;padding:2px}
+.rw{display:grid;grid-template-columns:6.5rem 1fr 3.2rem 4.6rem 1.8rem;gap:4px;padding:4px 10px}
+.rw input{padding:6px 7px;font-size:14px}.rw button{padding:0}
+.cv{display:flex;justify-content:space-between;gap:12px;padding:9px 14px;border-top:1px solid var(--ln)}
+.cv b{font-weight:600}.cv span{color:var(--mut);white-space:nowrap}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px}.row>*{flex:1 1 130px}
+@media print{.top,button,.np{display:none!important}body{background:#fff}.day{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* ===== CONFIGURACIÓN ===== */
+const SB_URL='https://xkevebgqeirercfawwhj.supabase.co',SB_KEY='sb_publishable_M06Lb2RvyTdXMNEaPwqAzA_vorp13pb',DOM='@rutinas.example.com';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+const $=s=>document.querySelector(s),app=$('#app'),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/* ===== EJERCICIOS: sin sufijo = gym, |c = casa, |a = ambos ===== */
+const RAW={
+"Pecho":"Press de banca con barra;Press inclinado con mancuernas|a;Press de pecho en máquina;Cruces en polea;Peck deck;Fondos en paralelas|a;Aperturas con mancuernas|a;Flexiones|c;Flexiones con manos elevadas|c;Flexiones declinadas|c;Flexiones diamante|c;Aperturas con banda|c",
+"Espalda":"Jalón al pecho;Remo con barra;Remo con mancuerna a una mano|a;Remo en polea baja;Remo en máquina;Dominadas|a;Pulldown brazos rectos;Remo con banda|c;Remo invertido bajo una mesa|c;Superman en suelo|c;Remo con mochila|c",
+"Hombro":"Press militar con barra;Press con mancuernas|a;Elevaciones laterales|a;Pájaro con mancuernas|a;Face pulls en polea;Press de hombros en máquina;Flexiones pike|c;Elevaciones laterales con banda|c;Face pulls con banda|c",
+"Cuádriceps":"Sentadilla con barra;Prensa 45°;Sentadilla hack;Extensiones de cuádriceps;Sentadilla búlgara|a;Zancadas|a;Sentadilla goblet|a;Sentadilla con peso corporal|c;Sentadilla con salto|c;Step-ups en silla|c;Sentadilla isométrica en pared|c",
+"Femorales":"Peso muerto rumano|a;Curl femoral tumbado;Curl femoral sentado;Buenos días;Nordic curl|a;Curl femoral con toalla|c;Peso muerto a una pierna|c;Puente de glúteo a una pierna|c",
+"Glúteos":"Hip thrust con barra;Patada de glúteo en polea;Abducción en máquina;Sentadilla sumo|a;Step-ups en cajón|a;Puente de glúteo|c;Hip thrust en sofá|c;Patada en cuadrupedia|c;Almeja con banda|c;Caminata lateral con banda|c",
+"Bíceps":"Curl con barra Z;Curl alterno|a;Curl martillo|a;Curl Scott;Curl en polea;Curl con banda|c;Curl con mochila|c",
+"Tríceps":"Extensión en polea con cuerda;Press francés;Fondos en paralelas;Extensión tras nuca|a;Patada de tríceps|a;Fondos en silla|c;Flexiones cerradas|c;Extensión con banda|c",
+"Pantorrilla":"Talones de pie en máquina;Talones sentado;Talones en prensa;Talones con mancuerna|a;Talones en un escalón|c;Saltos de pantorrilla|c",
+"Core":"Crunch en polea;Elevación de piernas colgado;Rueda abdominal|a;Plancha|c;Plancha lateral|c;Dead bug|c;Mountain climbers|c;Bicicleta abdominal|c;Hollow hold|c",
+"Cardio":"Cinta: caminata inclinada;Bicicleta estática;Elíptica;Remo ergómetro;Saltar la cuerda|a;Burpees|c;Jumping jacks|c;Trote en el lugar|c;Boxeo de sombra|c"};
+const DB=Object.fromEntries(Object.entries(RAW).map(([m,s])=>[m,s.split(';').map(x=>{const[n,t='g']=x.split('|');return{n,t}})]));
+const pool=(m,pl)=>(DB[m]||[]).filter(o=>o.t=='a'||o.t==(pl=='casa'?'c':'g')).map(o=>o.n);
+/* ===== GENERADOR AUTOMÁTICO ===== */
+const GOALS={fuerza:{s:4,r:'4-6',d:'150 s'},hipertrofia:{s:4,r:'8-12',d:'90 s'},'pérdida de grasa':{s:3,r:'12-15',d:'45-60 s'},'salud y tono':{s:3,r:'10-12',d:'60-90 s'}};
+const LV=['principiante','intermedio','avanzado'],SEX=['mujer','hombre','otro'],PL=['gym','casa'];
+const BON={mujer:{Glúteos:1,Femorales:0},hombre:{Hombro:1,Pecho:0,Espalda:1}}; /* énfasis editable por sexo */
+const FULL=[['Cuerpo completo A',['Cuádriceps','Pecho','Espalda','Core']],['Cuerpo completo B',['Glúteos','Hombro','Espalda','Bíceps','Tríceps']],['Cuerpo completo C',['Femorales','Pecho','Espalda','Core','Pantorrilla']]];
+const UL=[['Tren superior',['Pecho','Espalda','Hombro','Bíceps','Tríceps']],['Tren inferior',['Cuádriceps','Femorales','Glúteos','Pantorrilla','Core']]];
+const PPL=[['Empuje',['Pecho','Hombro','Tríceps']],['Tirón',['Espalda','Bíceps','Core']],['Pierna',['Cuádriceps','Femorales','Glúteos','Pantorrilla']]];
+const split=d=>d<=3?FULL.slice(0,Math.max(2,d)):d==4?[...UL,...UL]:Array.from({length:d},(_,i)=>PPL[i%3]);
+function gen(o){const g=GOALS[o.goal]||GOALS.hipertrofia,lv=Math.max(0,LV.indexOf(o.level)),bon=BON[o.sex]||{};
+ return{rest:g.d,days:split(+o.days||3).map(([t,ms],i)=>{const ex=[];
+  ms.forEach(m=>{const p=pool(m,o.place);if(!p.length)return;const n=Math.max(1,(ms.length>4?1:2)+(lv==0&&ms.length<=4?-1:0)+(lv==2&&ms.length<=4?1:0)+(bon[m]||0));
+   for(let k=0;k<n&&k<p.length;k++)ex.push({m,n:p[(i*3+k+lv)%p.length],s:String(Math.max(2,g.s+lv-1)),r:g.r,t:''})});
+  if(o.goal=='pérdida de grasa'){const p=pool('Cardio',o.place);ex.push({m:'Cardio',n:p[i%p.length],s:'1',r:'15-20 min',t:''})}
+  return{name:`Día ${i+1} · ${t}`,ex}})}}
+/* ===== SESIÓN ===== */
+let me=null,clients=[],tpls=[],invs=[],cur=null,R=null;
+const uname=v=>(v||'').trim().toLowerCase().replace(/[^a-z0-9._-]/g,'');
+const opts=(a,v)=>a.map(x=>`<option${x==v?' selected':''}>${x}</option>`).join('');
+const err=m=>{const e=$('#err');if(e)e.textContent=m};
+async function init(){const{data:{session}}=await sb.auth.getSession();session?boot():authView()}
+async function boot(){const{data:{user}}=await sb.auth.getUser();if(!user)return authView();
+ const{data}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();me=data;
+ if(!me){app.innerHTML=`<div class="auth box"><h1>Perfil no encontrado</h1><p class="mut">Tu cuenta existe pero no tiene perfil. Pide un nuevo código de invitación.</p><button onclick="out()">Salir</button></div>`;return}
+ me.role=='admin'?adminView():clientView()}
+const out=async()=>{await sb.auth.signOut();me=cur=R=null;authView()};
+function authView(reg){const code=new URLSearchParams(location.search).get('code')||'';reg=reg??!!code;
+ app.innerHTML=`<div class="auth box"><h1>${reg?'Crear mi cuenta':'Entrar'}</h1><div class="f">
+ ${reg?`<div><label>Código de invitación</label><input id="c" value="${esc(code)}"></div><div><label>Nombre completo</label><input id="n"></div>`:''}
+ <div><label>Usuario</label><input id="u" autocomplete="username" autocapitalize="none"></div>
+ <div><label>Contraseña (mínimo 6 caracteres)</label><input id="p" type="password" autocomplete="${reg?'new':'current'}-password"></div>
+ ${reg?`<div class="g2"><div><label>Objetivo</label><select id="g">${opts(Object.keys(GOALS))}</select></div><div><label>Nivel</label><select id="l">${opts(LV)}</select></div>
+ <div><label>Sexo</label><select id="s">${opts(SEX)}</select></div><div><label>Días por semana</label><select id="d">${opts([2,3,4,5,6],3)}</select></div></div>
+ <div><label>Dónde entrenas</label><select id="pl">${opts(PL)}</select></div>`:''}
+ <div class="err" id="err"></div><button class="pri" id="go">${reg?'Crear cuenta':'Entrar'}</button>
+ <button onclick="authView(${!reg})">${reg?'Ya tengo cuenta':'Tengo un código de invitación'}</button></div></div>`;
+ $('#go').onclick=reg?register:login}
+async function login(){const u=uname($('#u').value);if(!u||!$('#p').value)return err('Escribe usuario y contraseña');
+ const{error}=await sb.auth.signInWithPassword({email:u+DOM,password:$('#p').value});error?err('Usuario o contraseña incorrectos'):boot()}
+async function register(){const u=uname($('#u').value),p=$('#p').value,c=$('#c').value.trim(),n=$('#n').value.trim();
+ if(!c||!n||u.length<3||p.length<6)return err('Completa código, nombre, usuario (3+ letras) y contraseña (6+)');
+ const ok=await sb.rpc('check_invite',{c});if(!ok.data)return err('Ese código no es válido o ya se usó');
+ const{data,error}=await sb.auth.signUp({email:u+DOM,password:p});
+ if(error)return err(/registered/i.test(error.message)?'Ese usuario ya existe':error.message);
+ if(!data.session)return err('Falta desactivar Confirm email en Supabase');
+ const r=await sb.rpc('register_profile',{c,u,n,g:$('#g').value,l:$('#l').value,s:$('#s').value,d:+$('#d').value,p:$('#pl').value});
+ if(r.error){await sb.auth.signOut();return err('No se pudo crear el perfil: '+r.error.message)}boot()}
+/* ===== VISTA CLIENTE ===== */
+const showR=r=>r&&r.days?`<p class="mut">Descanso entre series: ${esc(r.rest||'')}</p>`+r.days.map(d=>`<div class="day"><div class="dh">${esc(d.name)}</div>${d.ex.filter(e=>e.n).map(e=>`<div class="cv"><div><b>${esc(e.n)}</b><div class="mut">${esc(e.m)}${e.t?' · '+esc(e.t):''}</div></div><span>${esc(e.s)} × ${esc(e.r)}</span></div>`).join('')}</div>`).join(''):'<p class="mut">Tu entrenador aún no te asigna una rutina. Vuelve pronto.</p>';
+function clientView(){app.innerHTML=`<div class="top"><h1>Hola, ${esc(me.full_name)}</h1><button onclick="print()">Imprimir</button><button onclick="out()">Salir</button></div><main><div class="box"><b>Objetivo:</b> ${esc(me.goal)} · <b>Nivel:</b> ${esc(me.level)} · <b>Entrenas:</b> ${esc(me.place)}, ${me.days} días</div>${showR(me.routine)}</main>`}
+/* ===== PANEL ADMIN ===== */
+async function load(){const[a,b,c]=await Promise.all([sb.from('profiles').select('*').eq('role','client').order('created_at',{ascending:false}),sb.from('templates').select('*').order('name'),sb.from('invites').select('*').eq('used',false).eq('admin',false)]);clients=a.data||[];tpls=b.data||[];invs=c.data||[]}
+async function adminView(){await load();
+ const base=location.origin+location.pathname;
+ app.innerHTML=`<div class="top"><h1>Panel de administrador</h1><button onclick="out()">Salir</button></div><main><div class="adm"><div>
+ <div class="box"><b>Clientes (${clients.length})</b><div style="margin-top:8px">${clients.map(c=>`<button class="cl${cur&&cur.id==c.id?' on':''}" data-a="pick" data-id="${c.id}">${esc(c.full_name)}<div class="mut">${esc(c.username)} · ${esc(c.goal)}</div></button>`).join('')||'<span class="mut">Aún no hay clientes.</span>'}</div></div>
+ <div class="box"><b>Invitar cliente</b><div class="row"><button class="pri" data-a="inv">Crear link de registro</button></div>
+ ${invs.map(i=>`<div class="mut" style="word-break:break-all;margin-top:8px">${esc(base+'?code='+i.code)} <button data-a="delinv" data-code="${i.code}">×</button></div>`).join('')}</div></div>
+ <div id="det">${cur?detail():'<div class="box mut">Elige un cliente de la lista para ver su perfil y asignarle una rutina.</div>'}</div></div></main>`}
+function detail(){const c=cur;return`<div class="box"><b style="font:700 24px 'Barlow Condensed'">${esc(c.full_name)}</b> <span class="mut">usuario: ${esc(c.username)}</span>
+ <div class="row"><div><label class="mut">Objetivo</label><select id="g">${opts(Object.keys(GOALS),c.goal)}</select></div><div><label class="mut">Nivel</label><select id="l">${opts(LV,c.level)}</select></div><div><label class="mut">Sexo</label><select id="s">${opts(SEX,c.sex)}</select></div><div><label class="mut">Días</label><select id="d">${opts([2,3,4,5,6],c.days)}</select></div><div><label class="mut">Lugar</label><select id="pl">${opts(PL,c.place)}</select></div></div>
+ <div class="row"><button data-a="gen" class="pri">Generar rutina automática</button>
+ <select id="tp"><option value="">Cargar plantilla…</option>${tpls.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select><button data-a="lt">Cargar</button></div></div>
+ <div id="ed">${R?editor():''}</div>
+ <div class="box np row"><button class="pri" data-a="save">Guardar en el perfil del cliente</button><input id="tn" placeholder="Nombre para guardar como plantilla"><button data-a="stpl">Guardar plantilla</button><button data-a="delc">Eliminar cliente</button></div><div id="msg" class="mut"></div>
+ <datalist id="dl">${[...new Set(Object.values(DB).flat().map(o=>o.n))].map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`}
+function editor(){return`<div class="box"><label class="mut">Descanso</label><input data-f="rest" value="${esc(R.rest||'')}" style="max-width:200px"></div>`+R.days.map((d,i)=>`<div class="day"><div class="dh"><input data-d="${i}" data-f="name" value="${esc(d.name)}"><button data-a="delD" data-d="${i}">Quitar día</button></div>${d.ex.map((e,k)=>`<div class="rw"><input data-d="${i}" data-x="${k}" data-f="m" value="${esc(e.m)}" placeholder="Músculo"><input list="dl" data-d="${i}" data-x="${k}" data-f="n" value="${esc(e.n)}" placeholder="Ejercicio"><input data-d="${i}" data-x="${k}" data-f="s" value="${esc(e.s)}" placeholder="Ser."><input data-d="${i}" data-x="${k}" data-f="r" value="${esc(e.r)}" placeholder="Reps"><button data-a="delE" data-d="${i}" data-x="${k}">×</button><input style="grid-column:1/-1" data-d="${i}" data-x="${k}" data-f="t" value="${esc(e.t)}" placeholder="Nota (peso, tempo, técnica)"></div>`).join('')}<div style="padding:6px 10px"><button data-a="addE" data-d="${i}">+ Ejercicio</button></div></div>`).join('')+`<button data-a="addD" style="margin-bottom:12px">+ Día</button>`}
+const redraw=()=>{$('#ed').innerHTML=R?editor():''};
+const msg=m=>{const e=$('#msg');if(e)e.textContent=m};
+document.addEventListener('input',e=>{const t=e.target,{d,x,f}=t.dataset;if(!R||!f)return;if(x!=null)R.days[d].ex[x][f]=t.value;else if(d!=null)R.days[d][f]=t.value;else R[f]=t.value});
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-a]');if(!t)return;const{a,d,x,id,code}=t.dataset;
+ switch(a){
+ case'pick':cur=clients.find(c=>c.id==id);R=cur.routine?JSON.parse(JSON.stringify(cur.routine)):null;adminView();break;
+ case'gen':R=gen({goal:$('#g').value,level:$('#l').value,sex:$('#s').value,days:$('#d').value,place:$('#pl').value});redraw();msg('Rutina generada. Edítala y pulsa Guardar en el perfil del cliente.');break;
+ case'lt':{const p=tpls.find(z=>z.id==$('#tp').value);if(p){R=JSON.parse(JSON.stringify(p.routine));redraw()}break}
+ case'addD':R=R||{rest:'90 s',days:[]};R.days.push({name:'Día '+(R.days.length+1),ex:[]});redraw();break;
+ case'delD':R.days.splice(d,1);redraw();break;
+ case'addE':R.days[d].ex.push({m:'',n:'',s:'3',r:'10-12',t:''});redraw();break;
+ case'delE':R.days[d].ex.splice(x,1);redraw();break;
+ case'save':{if(!R)return msg('Primero genera o crea una rutina');const v={routine:R,goal:$('#g').value,level:$('#l').value,sex:$('#s').value,days:+$('#d').value,place:$('#pl').value};
+  const{error}=await sb.from('profiles').update(v).eq('id',cur.id);if(error)return msg('Error: '+error.message);Object.assign(cur,v);msg('Guardada. El cliente ya la ve en su perfil.');break}
+ case'stpl':{const n=$('#tn').value.trim();if(!R||!n)return msg('Escribe un nombre y ten una rutina en pantalla');const{error}=await sb.from('templates').insert({name:n,routine:R});if(error)return msg('Error: '+error.message);await load();msg('Plantilla guardada');break}
+ case'delc':if(!t.dataset.sure){t.dataset.sure=1;t.textContent='¿Seguro?';return}await sb.from('profiles').delete().eq('id',cur.id);cur=R=null;adminView();break;
+ case'inv':{const c=Math.random().toString(36).slice(2,10);await sb.from('invites').insert({code:c});adminView();break}
+ case'delinv':await sb.from('invites').delete().eq('code',code);adminView();break;
+ }});
+init();
+</script>
+</body>
+</html>
