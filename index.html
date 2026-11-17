@@ -894,7 +894,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-a]')
  case'fl_savelinks':{for(const k of ['basico','pers_m','pers_m_dua','pers_a','pers_a_dua']){const v=($('#pl_'+k)||{}).value||'';if(v&&v!==PAYL[k]||SET['pay_'+k]){const r=await sb.from('app_settings').upsert({key:'pay_'+k,value:v.trim()});if(r.error)return toast('No se pudo guardar: '+r.error.message);SET['pay_'+k]=v.trim()}}toast('Links guardados');break}
  }});
 
-const COACH={nombre:'Lic. Manuel Amezcua',titulo:'Nutriólogo',esp:'Nutrición y asesoría deportiva',cedula:'10184091',mail:'contacto@duofitsystem.com'};
+const COACH={nombre:'Lic. Manuel Amezcua',titulo:'Nutriólogo',esp:'Nutrición y asesoría deportiva',cedula:'10184091',mail:'soporte@duofitsystem.com'};
 const coachBox=()=>`<div class="box" style="text-align:left"><div class="mut" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Tu asesor</div><b style="font:700 24px 'Barlow Condensed'">${COACH.nombre}</b><div>${COACH.titulo} · ${COACH.esp}</div><div class="mut">Cédula profesional ${COACH.cedula}</div><div class="mut"><a href="mailto:${COACH.mail}">${COACH.mail}</a></div></div>`;
 /* ===== SESIÓN ===== */
 let me=null,clients=[],tpls=[],cur=null,R=null,RC={},RG={},cq='',ptab='res',eday=0,cday=0,CL=[],SET={},apw='';
@@ -1188,6 +1188,12 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-a]')
  case'delE':R.days[d].ex.splice(x,1);redraw();break;
  }});
 init();
+
+/* Conserva la posición del deslizador de pastillas (días / comidas) al seleccionar */
+document.addEventListener('click',e=>{const b=e.target.closest('.sp button');if(!b)return;const sp=b.parentElement,all=[...document.querySelectorAll('.sp')],i=all.indexOf(sp),x=sp.scrollLeft;if(i<0)return;
+ const fix=()=>{const n=document.querySelectorAll('.sp')[i];if(n&&Math.abs(n.scrollLeft-x)>1)n.scrollLeft=x};
+ const mo=new MutationObserver(fix);mo.observe(document.body,{childList:true,subtree:true});
+ [0,50,150,400,900].forEach(t=>setTimeout(fix,t));setTimeout(()=>mo.disconnect(),1000)},true);
 </script>
 </body>
 </html>
