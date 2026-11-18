@@ -894,10 +894,67 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-a]')
  case'fl_savelinks':{for(const k of ['basico','pers_m','pers_m_dua','pers_a','pers_a_dua']){const v=($('#pl_'+k)||{}).value||'';if(v&&v!==PAYL[k]||SET['pay_'+k]){const r=await sb.from('app_settings').upsert({key:'pay_'+k,value:v.trim()});if(r.error)return toast('No se pudo guardar: '+r.error.message);SET['pay_'+k]=v.trim()}}toast('Links guardados');break}
  }});
 
+/* ===== ENTRENO CON CRONÓMETRO Y CUMPLIMIENTO ===== */
+const MINW=15*60; // minutos mínimos para contar un día como cumplido (solo interno)
+let WS={cy:1,wk:1,wsel:1,rows:{},rid:null,act:null,rest:null,tk:null};
+const wkKey=(w,d)=>w+'-'+d;
+const fmtT=s=>{s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')};
+const wkSecs=w=>w&&w.ended_at?Math.round((new Date(w.ended_at)-new Date(w.started_at))/1000):w?Math.round((Date.now()-new Date(w.started_at))/1000):0;
+const wkDone=w=>!!(w&&w.ended_at&&wkSecs(w)>=MINW);
+function wkCycle(r){let ci=me.service!='basico'?cycleInfo(me):null;if(ci&&!ci.pre)return{cy:ci.cycle,wk:ci.wk};
+ const ds=Math.max(0,Math.floor((Date.now()-new Date(r.created_at))/DAY));return{cy:Math.floor(ds/28)+1,wk:Math.min(4,Math.floor(ds%28/7)+1)}}
+async function wkLoad(r){const c=wkCycle(r);const sameCy=WS.cy==c.cy&&WS.rid==r.id;WS.cy=c.cy;WS.wk=c.wk;WS.rid=r.id;if(!sameCy||!WS.wsel)WS.wsel=c.wk;
+ const{data}=await sb.from('workouts').select('*').eq('client_id',me.id).eq('cycle',c.cy);WS.rows={};(data||[]).forEach(w=>WS.rows[wkKey(w.week,w.day)]=w)}
+const wkCur=()=>WS.rows[wkKey(WS.wsel,cday)];
+const restSecs=(e,r)=>{const t=String(e.d||r.rest||'');const m=t.match(/(\d+)(?:\s*[-–]\s*(\d+))?\s*(min|m\b|s|seg)?/i);if(!m)return 60;let n=+m[1];if(/^m/i.test(m[3]||'')||(!m[3]&&n<=5))n*=60;return n}
+function wkDayBody(r){const d=r.days[Math.min(cday,r.days.length-1)],w=wkCur(),run=w&&!w.ended_at,fut=WS.wsel>WS.wk,ex=(w&&w.ex)||{};
+ const items=d.ex.filter(e=>e.n);const nd=items.filter((e,i)=>ex[i]&&ex[i].done).length;
+ let st='';if(w&&w.ended_at)st=`<div class="alert" style="border-color:#1a8f3c"><b>✓ Entrenado</b> · ${Math.max(1,Math.round(wkSecs(w)/60))} min · ${nd} de ${items.length} ejercicios</div>`;
+ const head=`<div class="day"><div class="dh">${esc(d.name)}</div>${d.note?`<div class="dnote">${esc(d.note)}</div>`:''}`;
+ const rows=items.map((e,i)=>{const x=ex[i]||{},rest=e.d||(e.m=='Cardio'?'':r.rest),on=run,rs=restSecs(e,r);
+  return`<div class="cv" style="flex-wrap:wrap"><div class="nm">${thumb(e.n)}<div><b>${esc(e.n)}</b><div class="mut">${esc(e.m)}${e.t?' · '+esc(e.t):''}</div></div></div><span style="text-align:right">${fmtR(e)}${rest?`<br><small>Descanso ${esc(rest)}</small>`:''}</span>
+  <div style="flex:1 0 100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><button data-w="done" data-i="${i}" ${on?'':'disabled'} class="${x.done?'pri':''}">${x.done?'✓ Hecho':'Marcar hecho'}</button><button data-w="act" data-i="${i}" ${on?'':'disabled'}>${WS.act&&WS.act.i==i&&WS.act.d==cday?'■ <span id="wkact">'+fmtT((Date.now()-WS.act.t0)/1000)+'</span>':'▶ Serie activa'}</button><button data-w="rest" data-i="${i}" data-s="${rs}" ${on?'':'disabled'}>⏱ Descanso ${rs}s</button>${x.act?`<span class="mut" style="font-size:12px">activo ${fmtT(x.act)}</span>`:''}</div></div>`}).join('');
+ let foot='';
+ if(fut)foot='<p class="mut">Esta semana aún no llega.</p>';
+ else if(!w)foot='<button class="pri" data-w="start" style="width:100%;margin-top:10px">▶ Comenzar entreno</button><p class="mut" style="font-size:12px">Al comenzar se activan el cronómetro, el descanso y el tiempo activo de cada ejercicio.</p>';
+ else if(run)foot='<div class="row" style="margin-top:10px"><button class="pri" data-w="end">Finalizar entreno</button><button data-w="reset">Reiniciar</button></div>';
+ else foot='<div class="row" style="margin-top:10px"><button data-w="reset">Reiniciar este día</button></div>';
+ const bar=run?`<div id="wkbar" style="position:sticky;top:0;z-index:5;background:var(--bar);color:#fff;border-radius:12px;padding:8px 12px;margin:6px 0;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>⏱ Entreno <b id="wkel">${fmtT(wkSecs(w))}</b></span><span id="wkrs" style="font-weight:700"></span></div>`:'';
+ return bar+st+head+(fut&&!w?items.map(e=>`<div class="cv"><div class="nm">${thumb(e.n)}<div><b>${esc(e.n)}</b><div class="mut">${esc(e.m)}</div></div></div><span>${fmtR(e)}</span></div>`).join(''):rows)+'</div>'+foot}
+function wkBody(r){if(!(r&&r.days))return showR(null);const n=r.days.length;if(cday>=n)cday=0;
+ const wp=`<div class="sp">${[1,2,3,4].map(k=>{const dn=r.days.filter((_,j)=>wkDone(WS.rows[wkKey(k,j)])).length;return`<button class="${k==WS.wsel?'on':''}" data-w="week" data-k="${k}"><b>Semana ${k}</b><small>${k==WS.wk?'actual · ':''}${dn}/${n}</small></button>`}).join('')}</div>`;
+ const dp=n>1?`<div class="sp">${r.days.map((d,i)=>{const w=WS.rows[wkKey(WS.wsel,i)],mk=w&&w.ended_at?'✓ ':w?'▶ ':'';return`<button class="${i==cday?'on':''}" data-a="cday" data-d="${i}"><b>${mk}Día ${i+1}</b><small>${dayShort(d,i)}</small></button>`}).join('')}</div>`:'';
+ return(r.note?`<details class="note"><summary><b>Cómo usar tu plan</b></summary><div class="nt2">${fmtNote(r.note)}</div></details>`:'')+wp+dp+'<div id="wkday">'+wkDayBody(r)+'</div>'}
+function wkRedraw(){const r=CL[0]&&CL[0].data;const b=$('#rbody');if(b&&r)b.innerHTML=wkBody(r);wkTick()}
+const wkSave=w=>{if(w&&w.id)sb.from('workouts').update({ex:w.ex,active_secs:w.active_secs||0}).eq('id',w.id).then(()=>{})};
+function wkStopAct(){const a=WS.act;if(!a)return;const w=WS.rows[wkKey(WS.wsel,a.d)];if(w){w.ex=w.ex||{};const x=w.ex[a.i]=w.ex[a.i]||{};const s=Math.round((Date.now()-a.t0)/1000);x.act=(x.act||0)+s;w.active_secs=(w.active_secs||0)+s;wkSave(w)}WS.act=null}
+function wkTick(){clearInterval(WS.tk);WS.tk=setInterval(()=>{const w=wkCur(),e=$('#wkel');
+  if(!$('#wkday')){clearInterval(WS.tk);return}
+  if(e&&w&&!w.ended_at)e.textContent=fmtT(wkSecs(w));
+  const a=$('#wkact');if(a&&WS.act)a.textContent=fmtT((Date.now()-WS.act.t0)/1000);
+  const rs=$('#wkrs');if(rs){if(WS.rest){const left=Math.ceil((WS.rest.end-Date.now())/1000);if(left>0)rs.textContent='Descanso '+fmtT(left);else{rs.textContent='¡Listo! A la siguiente serie';if(!WS.rest.done){WS.rest.done=1;try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(_){}setTimeout(()=>{if(WS.rest&&WS.rest.done){WS.rest=null;const q=$('#wkrs');if(q)q.textContent=''}},4000)}}}else rs.textContent=''}},500)}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-w]');if(!t||t.disabled)return;const k=t.dataset.w,r=CL[0]&&CL[0].data;if(!r)return;
+ if(k=='week'){wkStopAct();WS.wsel=+t.dataset.k;wkRedraw();return}
+ if(k=='start'){t.disabled=true;const row={client_id:me.id,cycle:WS.cy,week:WS.wsel,day:cday};let{data,error}=await sb.from('workouts').insert(row).select().single();
+  if(error){const q=await sb.from('workouts').select('*').eq('client_id',me.id).eq('cycle',WS.cy).eq('week',WS.wsel).eq('day',cday).maybeSingle();data=q.data}
+  if(!data){t.disabled=false;return toast('No se pudo iniciar: '+(error?error.message:''))}
+  WS.rows[wkKey(WS.wsel,cday)]=data;wkRedraw();return}
+ const w=wkCur();if(!w)return;
+ if(k=='done'){w.ex=w.ex||{};const x=w.ex[t.dataset.i]=w.ex[t.dataset.i]||{};x.done=!x.done;wkSave(w);wkRedraw();return}
+ if(k=='act'){const i=+t.dataset.i;if(WS.act&&WS.act.i==i&&WS.act.d==cday)wkStopAct();else{wkStopAct();WS.act={i,d:cday,t0:Date.now()}}wkRedraw();return}
+ if(k=='rest'){WS.rest={end:Date.now()+(+t.dataset.s)*1000};wkTick();return}
+ if(k=='end'){wkStopAct();const{data,error}=await sb.from('workouts').update({ended_at:new Date().toISOString(),ex:w.ex,active_secs:w.active_secs||0}).eq('id',w.id).select().single();if(error)return toast('No se pudo finalizar: '+error.message);WS.rows[wkKey(WS.wsel,cday)]=data;WS.rest=null;wkRedraw();toast('¡Entreno registrado! 💪');return}
+ if(k=='reset'){if(!t.dataset.sure){t.dataset.sure=1;t.textContent='¿Seguro? Se borra este día';return}wkStopAct();WS.rest=null;const{error}=await sb.from('workouts').delete().eq('id',w.id);if(error)return toast('No se pudo reiniciar');delete WS.rows[wkKey(WS.wsel,cday)];wkRedraw();toast('Día reiniciado');return}
+});
+/* Cumplimiento para el admin */
+function wkAdmin(c){const L=WL||[];if(!L.length)return`<div class="box"><b>Cumplimiento de entrenos</b><p class="mut" style="margin:4px 0">Aún no hay entrenos registrados.</p></div>`;
+ const tot=L.length,ok=L.filter(wkDone).length,secs=L.filter(w=>w.ended_at).map(wkSecs),avg=secs.length?Math.round(secs.reduce((a,b)=>a+b,0)/secs.length/60):0;
+ return`<div class="box"><b>Cumplimiento de entrenos</b><p style="margin:4px 0">Cumplidos (${MINW/60}+ min): <b>${ok}</b> de ${tot} registrados · promedio ${avg} min</p>${L.slice(0,28).map(w=>{const s=wkSecs(w),fin=!!w.ended_at,okk=wkDone(w),n=Object.values(w.ex||{}).filter(x=>x.done).length;return`<div class="irow"><span class="n">C${w.cycle} · Sem ${w.week} · Día ${w.day+1}</span><span class="q">${fin?Math.round(s/60)+' min':'en curso'} · activo ${fmtT(w.active_secs||0)} · ${n} ej. · ${okk?'<b style="color:#1a8f3c">Cumplido</b>':fin?'<b style="color:#d6361f">Incompleto</b>':'—'}</span></div>`}).join('')}</div>`}
+
 const COACH={nombre:'Lic. Manuel Amezcua',titulo:'Nutriólogo',esp:'Nutrición y asesoría deportiva',cedula:'10184091',mail:'soporte@duofitsystem.com'};
 const coachBox=()=>`<div class="box" style="text-align:left"><div class="mut" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Tu asesor</div><b style="font:700 24px 'Barlow Condensed'">${COACH.nombre}</b><div>${COACH.titulo} · ${COACH.esp}</div><div class="mut">Cédula profesional ${COACH.cedula}</div><div class="mut"><a href="mailto:${COACH.mail}">${COACH.mail}</a></div></div>`;
 /* ===== SESIÓN ===== */
-let MYMAIL='',me=null,clients=[],tpls=[],cur=null,R=null,RC={},RG={},cq='',ptab='res',eday=0,cday=0,CL=[],SET={},apw='';
+let WL=[],MYMAIL='',me=null,clients=[],tpls=[],cur=null,R=null,RC={},RG={},cq='',ptab='res',eday=0,cday=0,CL=[],SET={},apw='';
 const NAVK='rutinas_nav_v1';
 const navSave=()=>{try{localStorage.setItem(NAVK,JSON.stringify({uid:me&&me.id,tab,ptab,ctab,cid:cur?cur.id:null}))}catch(e){}};
 const navLoad=()=>{try{return JSON.parse(localStorage.getItem(NAVK))||{}}catch(e){return{}}};
@@ -1049,11 +1106,11 @@ async function clientView(){
 const weekBar=L=>{if(!L.length)return'';const ci=me.service!='basico'?cycleInfo(me):null;if(ci&&!ci.pre){const d=ci.inC;return`<p style="margin:0 0 4px"><b>Semana ${ci.wk} de 4</b>${me.plan_type=='anual'?` <span class="mut">· ciclo ${ci.cycle} de 13</span>`:''} <span class="mut">· te quedan ${28-d} días de este plan</span></p><div class="bar"><i style="width:${Math.round(d/28*100)}%"></i></div>`}
  const ds=Math.max(0,Math.floor((Date.now()-new Date(L[0].created_at))/DAY)),wk=Math.min(4,Math.floor(ds/7)+1);
  return ds>=28?`<p style="margin:0 0 4px"><b>¡Terminaste tu plan de 4 semanas!</b> Pide a tu entrenador el siguiente.</p><div class="bar"><i style="width:100%"></i></div>`:`<p style="margin:0 0 4px"><b>Semana ${wk} de 4</b> <span class="mut">· te quedan ${28-ds} días de este plan</span></p><div class="bar"><i style="width:${Math.round(ds/28*100)}%"></i></div>`};
-async function clientTrain(){const{data}=await sb.from('routines').select('*').order('created_at',{ascending:false});const L=data||[];CL=L;
+async function clientTrain(){const{data}=await sb.from('routines').select('*').order('created_at',{ascending:false});const L=data||[];CL=L;if(L.length)await wkLoad(L[0]);
  let h='';const bx=isBasic(me)?(me.intake?genBox('r',L):'<div class="box"><b>Primero llena tu cuestionario de salud</b><p class="mut">Así tu rutina evita lo que te lastima.</p></div>'):'';
  if(!L.length){h=isBasic(me)?bx:showR(null)}
- else h=bx+`<div class="box">${weekBar(L)}</div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><h2 style="margin:6px 0">${esc(L[0].name)} <span class="mut" style="font-size:14px">${fd(L[0].created_at)}</span></h2><button onclick="print()">Imprimir</button></div><p class="mut" style="margin-top:0">Elige el día y toca la foto de un ejercicio para ver cómo se hace.</p><div id="rbody">${showR(L[0].data,false,cday)}</div>${L.length>1?'<h3>Rutinas anteriores</h3>'+L.slice(1).map(r=>`<details class="box"><summary><b>${esc(r.name)}</b> <span class="mut">${fd(r.created_at)}</span></summary>${showR(r.data)}</details>`).join(''):''}`;
- $('#cb').innerHTML=h}
+ else h=bx+`<div class="box">${weekBar(L)}</div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><h2 style="margin:6px 0">${esc(L[0].name)} <span class="mut" style="font-size:14px">${fd(L[0].created_at)}</span></h2><button onclick="print()">Imprimir</button></div><p class="mut" style="margin-top:0">Elige la semana y el día, y toca la foto de un ejercicio para ver cómo se hace.</p><div id="rbody">${wkBody(L[0].data)}</div>${L.length>1?'<h3>Rutinas anteriores</h3>'+L.slice(1).map(r=>`<details class="box"><summary><b>${esc(r.name)}</b> <span class="mut">${fd(r.created_at)}</span></summary>${showR(r.data)}</details>`).join(''):''}`;
+ $('#cb').innerHTML=h;wkTick()}
 const adminUpg=c=>{const cr=basicCredit(c);return`<div class="box" style="margin-top:12px;border-color:var(--ac)"><b>Subir a plan personalizado</b><p class="mut" style="margin:4px 0">Crédito por el tiempo no usado del básico: <b>${mxn(cr)}</b>. Al convertir, el servicio pasa a Personalizado y el plan inicia hoy.</p><select id="upo">${upgOpts(c).map(o=>`<option value="${o[0]}">${esc(o[1])} · ${mxn(o[2])} → cobrar ${mxn(Math.max(0,o[2]-cr))}</option>`).join('')}</select><button class="pri" data-a="doUpg" style="margin-top:8px">Convertir a personalizado</button></div>`};
 const upgradeBox=()=>{const cr=basicCredit(me);return`<div class="box" style="border-color:var(--ac)"><b>Estás en el plan Básico</b><p class="mut" style="margin:6px 0">Tu rutina y tu menú se generan automáticamente (2 opciones por comida). Con el plan personalizado tu entrenador los arma para ti, los ajusta, tienes más opciones y equivalentes para cambiar ingredientes.</p>${cr?`<p style="margin:6px 0">Tu tiempo ya pagado se te abona: <b>${mxn(cr)}</b> de crédito.</p>`:''}${upgOpts(me).map(o=>`<div class="irow"><span class="n">${esc(o[1])}</span><span class="q">${mxn(o[2])}${cr?' → pagas '+mxn(Math.max(0,o[2]-cr)):''}</span></div>`).join('')}<button class="pri" data-a="upgrade" style="margin-top:8px">Quiero el plan personalizado</button></div>`};
 async function clientAccount(){await loadMyNotes();const{data}=await sb.from('routines').select('id,created_at').order('created_at',{ascending:false});
@@ -1064,7 +1121,7 @@ const copy=o=>JSON.parse(JSON.stringify(o)),LB={goal:'Objetivo',level:'Nivel',se
 function toast(m){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t)}t.textContent=m;t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',5000)}
 async function load(){const[a,b,c]=await Promise.all([sb.from('profiles').select('*').eq('role','client').order('created_at',{ascending:false}),sb.from('templates').select('*').order('name'),sb.from('routines').select('client_id,created_at')]);clients=a.data||[];tpls=b.data||[];RC={};await loadFlow();
  (c.data||[]).forEach(r=>{const k=RC[r.client_id]=RC[r.client_id]||{n:0,last:null};k.n++;if(!k.last||r.created_at>k.last)k.last=r.created_at});rts=[];
- if(cur){cur=clients.find(z=>z.id==cur.id)||null;if(cur){rts=(await sb.from('routines').select('*').eq('client_id',cur.id).order('created_at',{ascending:false})).data||[];await loadProg(cur.id)}}await loadNut()}
+ if(cur){cur=clients.find(z=>z.id==cur.id)||null;if(cur){rts=(await sb.from('routines').select('*').eq('client_id',cur.id).order('created_at',{ascending:false})).data||[];await loadProg(cur.id);WL=((await sb.from('workouts').select('*').eq('client_id',cur.id).order('started_at',{ascending:false})).data)||[]}}await loadNut()}
 const arr=a=>Array.isArray(a)?a:[];
 const realInj=c=>arr(c.injuries).filter(k=>INJR[k]);
 function tagsOf(c){const t=[],k=RC[c.id];
@@ -1092,7 +1149,7 @@ const trainTab=()=>`<div class="box"><b>Rutinas del cliente (${rts.length})</b>$
 const clientPanel=()=>{const c=cur;
  const head=`<div class="box"><div class="chead"><div><button class="onlym" data-a="toList" style="margin-bottom:8px">← Todos los clientes</button><div style="font:700 28px 'Barlow Condensed'">${esc(c.full_name)}</div><span class="mut">usuario: ${esc(c.username)} · ${c.service=='basico'?'plan básico':'plan personalizado'}</span></div><div>${tagsOf(c)}</div></div></div>`;
  const tabs=`<nav class="tabsbar">${[['res','Resumen'],['tr','Entrenamiento'],['nu','Nutrición'],['pr','Progreso']].map(([k,l])=>`<button class="${ptab==k?'on':''}" data-a="ptab" data-t="${k}">${l}</button>`).join('')}</nav>`;
- const body=ptab=='tr'?trainTab():ptab=='nu'?nutBox():ptab=='pr'?`<div class="box"><div id="pg">${progressView(c.id)}</div></div>`:flowPanel(c)+healthBox(c)+notesAdmin(c)+accountBox(c);
+ const body=ptab=='tr'?trainTab():ptab=='nu'?nutBox():ptab=='pr'?`<div class="box"><div id="pg">${progressView(c.id)}</div></div>`:flowPanel(c)+wkAdmin(c)+healthBox(c)+notesAdmin(c)+accountBox(c);
  return head+tabs+body};
 const sel=(k,h)=>`<div><label class="mut">${LB[k]}</label><select data-g="${k}">${h}</select></div>`;
 const restr=()=>{if(!(tab=='c'&&cur))return'';const a=realInj(cur).map(k=>INJN[k]),b=arr(cur.no_equip).map(k=>EQN[k]);return a.length||b.length?`<p class="mut" style="margin:8px 0 0">Se aplicarán a este cliente: ${a.length?'evitar '+a.join(', ').toLowerCase():''}${a.length&&b.length?' · ':''}${b.length?'sin '+b.join(', ').toLowerCase():''}.</p>`:''};
@@ -1162,7 +1219,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-a]')
  case'refresh':{const y=scrollY;if(me.role=='admin')await adminView();else await clientView();scrollTo(0,y);toast('Actualizado');break}
  case'ptab':ptab=t.dataset.t;render();break;
  case'toList':cur=null;render();break;
- case'cday':cday=+d;{const b=$('#rbody');if(b&&CL[0])b.innerHTML=showR(CL[0].data,false,cday)}break;
+ case'cday':wkStopAct();cday=+d;wkRedraw();break;
  case'genpw':{const ch='abcdefghjkmnpqrstuvwxyz23456789';apw=Array.from({length:8},()=>ch[Math.floor(Math.random()*ch.length)]).join('');const i=$('#apw');if(i)i.value=apw;break}
  case'setpw':{const i=$('#apw'),pw=i?i.value.trim():'';if(pw.length<6)return toast('La contraseña debe tener al menos 6 caracteres');const r=await sb.rpc('admin_set_password',{cid:cur.id,pw});if(r.error)return toast('No se pudo restablecer: '+r.error.message);apw=pw;
   const msg=`Hola ${cur.full_name.split(' ')[0]}, ya puedes entrar a tu app con tu usuario: ${cur.username} y tu contraseña nueva: ${pw} . Entra aquí: ${location.origin+location.pathname} . Cuando entres, cámbiala en Perfil > Cambiar mi contraseña.`;
