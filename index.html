@@ -933,11 +933,12 @@ function authView(mode){const q=new URLSearchParams(location.search);
  if(!mode)mode=(q.get('registro')||q.get('code'))?'reg':'login';
  mode=='login'?loginView():mode=='reg'?regView():regView2()}
 function loginView(){app.innerHTML=`<div class="auth box"><div class="abrand">DUO<b>FIT</b> APP</div><h1>Entrar</h1><div class="f">
- <div><label>Correo o usuario</label><input id="u" autocomplete="username" autocapitalize="none"></div>
+ <div><label>Usuario <span class="mut">(o tu correo)</span></label><input id="u" autocomplete="username" autocapitalize="none"></div>
  <div><label>Contraseña</label><input id="p" type="password" autocomplete="current-password"></div>
  <div class="err" id="err"></div><button class="pri" id="go">Entrar</button><button data-a="toReg">Crear cuenta nueva</button><button data-a="forgot">Olvidé mi contraseña</button></div>${coachBox()}</div>`;
  $('#go').onclick=login;$('#p').onkeydown=e=>{if(e.key=='Enter')login()}}
-async function login(){const raw=$('#u').value.trim(),em=raw.includes('@')?mailOf(raw):uname(raw)+DOM;if(!raw||!$('#p').value)return err('Escribe tu correo y contraseña');
+async function login(){const raw=$('#u').value.trim();if(!raw||!$('#p').value)return err('Escribe tu usuario y contraseña');
+ let em;if(raw.includes('@'))em=mailOf(raw);else{const u=uname(raw);em=u+DOM;try{const r=await sb.rpc('login_email',{u});if(r.data)em=r.data}catch(e){}}
  const{error}=await sb.auth.signInWithPassword({email:em,password:$('#p').value});error?err('Correo, usuario o contraseña incorrectos'):boot()}
 const PQ=()=>{const p=new URLSearchParams(location.search).get('plan');return['basico','pers_m','pers_m_dua','pers_a','pers_a_dua','cortesia'].includes(p)?p:'pers_m'};
 const regBanner=()=>{const p=PQ(),P=PLANC[p];return`<div class="alert" style="margin:0 0 10px"><b>${esc(P[0])}</b>${p=='basico'?' · tu rutina y tu menú se generan automáticamente al activarse tu acceso.':p=='cortesia'?' · acceso de colaboración con tu código.':' · después de crear tu cuenta pasarás al pago; tu acceso se activa al confirmarse.'}</div>`};
@@ -1112,7 +1113,7 @@ function render(){const base=location.origin+location.pathname,C=tab=='c';navSav
 async function adminView(){await load();render()}
 const keepY=f=>{const y=scrollY;f();scrollTo(0,y)};
 document.addEventListener('input',e=>{const t=e.target,{d,x,f}=t.dataset;
- if(t.id=='u'){const v=uname(t.value);if(v!==t.value)t.value=v;schedUser();return}
+ if(t.id=='u'&&$('#uh')){const v=uname(t.value);if(v!==t.value)t.value=v;schedUser();return}
  if(t.id=='cq'){cq=t.value;const l=$('#clist');if(l)l.innerHTML=clientList();return}
  if(t.id=='rn'){rname=t.value;return}
  if(t.id=='lq'){libQ=t.value;libN=60;fillLib();return}
