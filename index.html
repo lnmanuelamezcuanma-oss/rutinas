@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DuoFit App</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#0f1115">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DuoFit">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f1115'/%3E%3Ctext x='32' y='46' font-size='36' font-weight='800' text-anchor='middle' font-family='Impact,Arial Narrow,sans-serif' fill='white'%3ED%3Ctspan fill='%23ff5a36'%3EF%3C/tspan%3E%3C/text%3E%3C/svg%3E"><meta name="theme-color" content="#0f1115">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -324,6 +331,12 @@ function planBanner(c){const dl=daysLeft(c);if(dl==null)return'';
  if(dl<0)return`<div class="alert"><b>Tu plan venció el ${fd(dparse(c.plan_end))}.</b> Escríbele a tu entrenador para renovarlo.</div>`;
  if(dl<=7)return`<div class="alert" style="border-color:#f0a500;background:#f0a50014"><b>Tu plan vence ${dl==0?'hoy':dl==1?'mañana':'en '+dl+' días'}.</b> Avísale a tu entrenador para renovarlo.</div>`;return''}
 /* ===== SEGUIMIENTO: medidas, gráficas y fotos ===== */
+const UK='duofit_units';let UNITS='metric';try{UNITS=localStorage.getItem(UK)||'metric'}catch(e){}
+const imp=()=>UNITS=='imperial'&&typeof me!=='undefined'&&me&&me.role!='admin';
+const uLbl=u=>imp()?(u=='kg'?'lb':u=='cm'?'in':u):u;
+const uOut=(v,u)=>v==null||!imp()?v:u=='kg'?v*2.20462:u=='cm'?v*0.393701:v;
+const uIn=(v,u)=>v==null||!imp()?v:u=='kg'?v/2.20462:u=='cm'?v/0.393701:v;
+const unG=s=>imp()?String(s).replace(/(\d+(?:[.,]\d+)?)\s?g\b/g,(_,n)=>{const o=parseFloat(n.replace(',','.'))/28.3495;return(o<10?Math.round(o*10)/10:Math.round(o)).toString().replace('.',',')+' oz'}):s;
 const MET=[['weight','Peso','kg'],['fat','% grasa','%'],['muscle','% músculo','%'],['waist','Cintura','cm'],['hip','Cadera','cm'],['chest','Pecho','cm'],['arm','Brazo','cm'],['thigh','Muslo','cm']];
 const METN=Object.fromEntries(MET.map(m=>[m[0],m]));
 const RNG={weight:[20,400],fat:[2,70],muscle:[10,80],waist:[30,250],hip:[30,250],chest:[30,250],arm:[10,100],thigh:[20,150]};
@@ -346,11 +359,11 @@ function lineChart(pts,unit){
   `<path class="l" d="${path}"/>`+pts.map((p,i)=>`<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="4"><title>${fd(dparse(p.d))}: ${f1(p.v)} ${unit}</title></circle>`).join('')+
   `<text x="${L}" y="${H-8}">${fd(dparse(first.d))}</text><text x="${W-R}" y="${H-8}" text-anchor="end">${fd(dparse(last.d))}</text>`+
   `<text x="${X(xs[xs.length-1]).toFixed(1)}" y="${(Y(last.v)-9).toFixed(1)}" text-anchor="end" class="lb">${f1(last.v)} ${unit}</text></svg>`}
-const series=k=>MS.filter(m=>m[k]!=null).map(m=>({d:String(m.d).slice(0,10),v:+m[k]})).sort((a,b)=>a.d<b.d?-1:1);
-function summary(){const cards=MET.map(([k,n,u])=>{const s=series(k);if(!s.length)return'';const a=s[0].v,b=s[s.length-1].v,dl=b-a;
+const series=k=>MS.filter(m=>m[k]!=null).map(m=>({d:String(m.d).slice(0,10),v:uOut(+m[k],METN[k][2])})).sort((a,b)=>a.d<b.d?-1:1);
+function summary(){const cards=MET.map(([k,n,u0])=>{const u=uLbl(u0),s=series(k);if(!s.length)return'';const a=s[0].v,b=s[s.length-1].v,dl=b-a;
   return`<div class="sc"><div class="mut">${n}</div><div class="big" style="font-size:30px">${f1(b)}<small style="font-size:14px"> ${u}</small></div>${s.length>1?`<div class="mut">${dl>0?'+':dl<0?'−':''}${f1(Math.abs(dl))} ${u} desde ${fd(dparse(s[0].d))}</div>`:'<div class="mut">Primera medición</div>'}</div>`}).join('');
  return cards?`<div class="scs">${cards}</div>`:'<p class="mut" style="margin:6px 0 0">Todavía no hay mediciones. Registra la primera para empezar a ver tu progreso.</p>'}
-const mInput=(k,l,u)=>`<div><label class="mut">${l} (${u})</label><input id="m_${k}" inputmode="decimal" placeholder="—"></div>`;
+const mInput=(k,l,u)=>`<div><label class="mut">${l} (${uLbl(u)})</label><input id="m_${k}" inputmode="decimal" placeholder="—"></div>`;
 function progressView(cid){
  const ph=PH.slice().sort((a,b)=>a.d<b.d?1:-1),opt=ph.map(p=>`<option value="${p.id}">${fd(dparse(p.d))} · ${KN[p.kind]||p.kind}</option>`).join('');
  const ca=PH.find(p=>p.id==cmpA),cb=PH.find(p=>p.id==cmpB);
@@ -359,8 +372,8 @@ function progressView(cid){
  <div class="box"><b>Registrar medición</b><p class="mut" style="margin:4px 0 0">Llena solo lo que tengas. Mídete siempre a la misma hora y en las mismas condiciones (por ejemplo, en ayunas).</p>
  <div class="row"><div><label class="mut">Fecha</label><input type="date" id="m_d" value="${todayISO()}" max="${todayISO()}"></div>${MET.map(([k,n,u])=>mInput(k,n,u)).join('')}<div style="flex:2 1 220px"><label class="mut">Nota (opcional)</label><input id="m_note" placeholder="Ej. después de vacaciones"></div></div>
  <div class="row"><button class="pri" data-a="addm" data-cid="${cid}">Guardar medición</button></div></div>
- <div class="box"><b>Gráfica</b><div class="pills">${MET.map(([k,n])=>`<button class="${pm==k?'on':''}" data-a="pm" data-k="${k}">${n}</button>`).join('')}</div>${lineChart(series(pm),METN[pm][2])}</div>
- <div class="box"><b>Historial</b>${MS.length?`<div class="tw"><table class="tb"><tr><th>Fecha</th>${MET.map(m=>`<th>${m[1]}</th>`).join('')}<th></th></tr>${MS.slice().sort((a,b)=>String(a.d)<String(b.d)?1:-1).map(m=>`<tr><td>${fd(dparse(m.d))}</td>${MET.map(([k])=>`<td>${f1(m[k]==null?null:+m[k])}</td>`).join('')}<td><button data-a="delm" data-id="${m.id}" data-cid="${cid}" title="Borrar">×</button></td></tr>`).join('')}</table></div>`:'<p class="mut">Sin registros.</p>'}</div>
+ <div class="box"><b>Gráfica</b><div class="pills">${MET.map(([k,n])=>`<button class="${pm==k?'on':''}" data-a="pm" data-k="${k}">${n}</button>`).join('')}</div>${lineChart(series(pm),uLbl(METN[pm][2]))}</div>
+ <div class="box"><b>Historial</b>${MS.length?`<div class="tw"><table class="tb"><tr><th>Fecha</th>${MET.map(m=>`<th>${m[1]}</th>`).join('')}<th></th></tr>${MS.slice().sort((a,b)=>String(a.d)<String(b.d)?1:-1).map(m=>`<tr><td>${fd(dparse(m.d))}</td>${MET.map(([k])=>`<td>${f1(m[k]==null?null:uOut(+m[k],METN[k][2]))}</td>`).join('')}<td><button data-a="delm" data-id="${m.id}" data-cid="${cid}" title="Borrar">×</button></td></tr>`).join('')}</table></div>`:'<p class="mut">Sin registros.</p>'}</div>
  <div class="box"><b>Fotos de progreso</b><p class="mut" style="margin:4px 0 0">Solo tú y tu entrenador pueden verlas. Usa buena luz y la misma pose en cada foto.</p>
  <div class="row"><div><label class="mut">Fecha</label><input type="date" id="p_d" value="${todayISO()}" max="${todayISO()}"></div><div><label class="mut">Foto de</label><select id="p_k">${KIND.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></div><div style="flex:2 1 220px"><label class="mut">Elegir foto o tomarla</label><input type="file" id="p_f" accept="image/*"></div></div>
  <div class="row"><button class="pri" data-a="upph" data-cid="${cid}">Subir foto</button><span class="mut" id="p_s"></span></div>
@@ -375,7 +388,7 @@ function resizeImg(file,max=1200,q=.82){return new Promise((ok,ko)=>{const img=n
  img.onload=()=>{let w=img.naturalWidth,h=img.naturalHeight;const s=Math.min(1,max/Math.max(w,h));w=Math.round(w*s);h=Math.round(h*s);const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);c.toBlob(b=>{URL.revokeObjectURL(u);b?ok(b):ko(new Error('No se pudo procesar la foto'))},'image/jpeg',q)};
  img.onerror=()=>{URL.revokeObjectURL(u);ko(new Error('No se pudo leer la imagen. Prueba con otra foto.'))};img.src=u})}
 async function addMeasure(cid){const d=$('#m_d').value||todayISO(),row={client_id:cid,d,note:($('#m_note').value||'').trim()||null};let n=0;
- for(const[k,l]of MET){const raw=$('#m_'+k).value.trim();if(!raw)continue;const v=num(raw);if(v==null||v<RNG[k][0]||v>RNG[k][1])return toast(`${l}: escribe un valor entre ${RNG[k][0]} y ${RNG[k][1]}`);row[k]=v;n++}
+ for(const[k,l]of MET){const raw=$('#m_'+k).value.trim();if(!raw)continue;const v0=num(raw),v=v0==null?null:Math.round(uIn(v0,METN[k][2])*100)/100;if(v==null||v<RNG[k][0]||v>RNG[k][1])return toast(`${l}: escribe un valor entre ${f1(uOut(RNG[k][0],METN[k][2]))} y ${f1(uOut(RNG[k][1],METN[k][2]))}`);row[k]=v;n++}
  if(!n)return toast('Escribe al menos un dato (peso, medida o porcentaje)');
  const r=await sb.from('measures').insert(row);if(r.error)return toast('No se pudo guardar: '+r.error.message);
  await refreshProg(cid);toast('Medición guardada')}
@@ -522,10 +535,11 @@ async function loadNut(){await loadCustom();const t=await sb.from('nutrition_tem
  const r=await sb.from('meal_plans').select('*').eq('client_id',cur.id).order('created_at',{ascending:false});NPLANS=r.data||[];
  if(NPL&&NPL.cid!=cur.id)NPL=null}
 /* ---------- cuestionario de alimentación ---------- */
+const nsVal=(k,v)=>{if(!imp()||(k!='weight'&&k!='height'))return v;const x=num(v);return x==null?v:String(Math.round(uIn(x,k=='weight'?'kg':'cm')*100)/100)};
 const newNS=(c,admin)=>{const n=(c&&c.nutri)||{};return{admin:!!admin,age:n.age||'',height:n.height||'',weight:n.weight||'',act:n.act||'1.375',diet:n.diet||'omnivoro',region:n.region||'',allergies:[...(n.allergies||[])],likes:[...(n.likes||[])],dislikes:[...(n.dislikes||[])],meals:(n.meals&&n.meals.length?n.meals:presetMeals(4)).map(m=>({...m}))}};
 const chipsH=(k)=>`<div class="chipw">${NS[k].map((x,i)=>`<span class="nchip">${esc(x)} <button data-a="n_rmchip" data-l="${k}" data-i="${i}" aria-label="Quitar">×</button></span>`).join('')||'<span class="mut">Ninguno</span>'}</div><div class="row" style="margin-top:4px"><input id="chip_${k}" list="fdl" placeholder="Escribe y elige un alimento de la lista"><button data-a="n_addchip" data-l="${k}" style="flex:0 0 auto">Agregar</button></div>`;
 function nutriForm(){const v=NS;
- return`<div class="row"><div><label class="mut">Edad</label><input data-ns="age" inputmode="numeric" value="${esc(v.age)}"></div><div><label class="mut">Estatura (cm)</label><input data-ns="height" inputmode="decimal" value="${esc(v.height)}"></div><div><label class="mut">Peso actual (kg)</label><input data-ns="weight" inputmode="decimal" value="${esc(v.weight)}"></div></div>
+ return`<div class="row"><div><label class="mut">Edad</label><input data-ns="age" inputmode="numeric" value="${esc(v.age)}"></div><div><label class="mut">Estatura (${uLbl('cm')})</label><input data-ns="height" inputmode="decimal" value="${esc(imp()&&v.height?Math.round(uOut(+v.height,'cm')*10)/10:v.height)}"></div><div><label class="mut">Peso actual (${uLbl('kg')})</label><input data-ns="weight" inputmode="decimal" value="${esc(imp()&&v.weight?Math.round(uOut(+v.weight,'kg')*10)/10:v.weight)}"></div></div>
  <div class="row"><div><label class="mut">Actividad diaria (sin contar tu entrenamiento de pesas, si trabajas de pie o caminas mucho cuenta)</label><select data-ns="act">${ACT.map(([k,l])=>`<option value="${k}"${v.act==k?' selected':''}>${l}</option>`).join('')}</select></div><div><label class="mut">Tipo de alimentación</label><select data-ns="diet">${DIETS.map(([k,l])=>`<option value="${k}"${v.diet==k?' selected':''}>${l}</option>`).join('')}</select></div><div><label class="mut">¿De qué región eres o comes?</label><select data-ns="region">${REGIONS.map(([k,l])=>`<option value="${k}"${v.region==k?' selected':''}>${l}</option>`).join('')}</select></div></div>
  <div style="margin-top:10px"><b>Alergias o intolerancias</b> <span class="mut">(nunca se incluirán en tu menú)</span></div><div class="chks">${ALLERGY.map(([k,l])=>`<label class="chk"><input type="checkbox" data-ns="allergies" value="${k}"${v.allergies.includes(k)?' checked':''}> ${l}</label>`).join('')}</div>
  <div style="margin-top:10px"><b>Alimentos que te encantan</b> <span class="mut">(aparecerán más seguido)</span></div>${chipsH('likes')}
@@ -556,7 +570,7 @@ function menuH(){const p=CP.plans[CP.i],sl0=p.data.slots,si=Math.min(nslot,sl0.l
  <div class="sp">${sl0.map((x,i)=>`<button class="${i==si?'on':''}" data-a="ns_slot" data-s="${i}"><b>${esc(x.n)}</b><small>${esc(x.h||'')}${x.h?' · ':''}${x.kcal} kcal</small></button>`).join('')}</div>
  <div class="seg" style="display:flex">${sl.opts.map((x,i)=>`<button style="flex:1" class="${i==oi?'on':''}" data-a="ns_opt" data-o="${i}">Opción ${i+1}</button>`).join('')}</div>
  <div class="ocard"><div style="font:700 26px 'Barlow Condensed',sans-serif;line-height:1.1">${esc(o.r)}</div><div class="mut">${mac(o)}${o.t?' · '+o.t+' min':''}</div>
- <div style="margin-top:8px">${o.items.map((i,ii)=>`<div class="irow"><span class="n">${esc(i.n)}</span><span class="q">${esc(i.u||i.g+' g')}</span>${(!B&&(i.eq||[]).length)?`<button class="sw" data-a="eq_open" data-s="${si}" data-o="${oi}" data-i="${ii}">⇄ Cambiar</button>`:''}</div>`).join('')}</div>
+ <div style="margin-top:8px">${o.items.map((i,ii)=>`<div class="irow"><span class="n">${esc(i.n)}</span><span class="q">${esc(unG(i.u||i.g+' g'))}</span>${(!B&&(i.eq||[]).length)?`<button class="sw" data-a="eq_open" data-s="${si}" data-o="${oi}" data-i="${ii}">⇄ Cambiar</button>`:''}</div>`).join('')}</div>
  ${o.st?`<details class="note" style="margin:10px 0 0"><summary><b>Preparación</b></summary><div class="nt2">${esc(o.st)}</div></details>`:''}</div>
  <p class="mut" style="margin:10px 0 0">Elige UNA opción por tiempo de comida. ${B?'':' Toca "⇄ Cambiar" para ver con qué puedes sustituir un ingrediente.'}</p>`}
 function eqTab(){if(isBasic(me)&&me.role!='admin')return`<div class="box" style="border-color:var(--ac)"><b>🔒 Equivalentes: plan personalizado</b><p class="mut" style="margin:6px 0">En el plan personalizado puedes cambiar cualquier ingrediente por otro que aporta lo mismo, y tienes 3 opciones por comida en lugar de 2.</p><button class="pri" data-a="upgrade">Quiero el plan personalizado</button></div>`;const G=CP.G;if(!eqgrp||!G.find(x=>x.g==eqgrp))eqgrp=G[0].g;const g=G.find(x=>x.g==eqgrp);
@@ -642,7 +656,7 @@ function ntView(){const f=NTF;
 /* ---------- eventos ---------- */
 const csvIn=el=>el.dataset.fdt?el.dataset.fdt:null;
 document.addEventListener('input',e=>{const t=e.target,d=t.dataset;
- if(d.ns!==undefined&&NS&&t.type!='checkbox'){NS[d.ns]=t.value;return}
+ if(d.ns!==undefined&&NS&&t.type!='checkbox'){NS[d.ns]=nsVal(d.ns,t.value);return}
  if(d.nf&&NTF){NTF[d.nf]=t.value;return}
  if(d.nm&&NS){NS.meals[d.i][d.nm]=t.value;return}
  if(d.fd&&FD&&t.type!='checkbox'){FD[d.fd]=t.value;return}
@@ -654,7 +668,7 @@ document.addEventListener('input',e=>{const t=e.target,d=t.dataset;
  if(d.pe=='st'||d.pe=='note'){if(!NPL)return;if(d.pe=='note')cpPlan().note=t.value;else cpPlan().slots[d.s].opts[d.o].st=t.value}});
 document.addEventListener('change',async e=>{const t=e.target,d=t.dataset;
  if(d.ns==='allergies'&&NS){const a=NS.allergies,i=a.indexOf(t.value);if(t.checked&&i<0)a.push(t.value);if(!t.checked&&i>=0)a.splice(i,1);return}
- if(d.ns!==undefined&&NS){NS[d.ns]=t.value;return}
+ if(d.ns!==undefined&&NS){NS[d.ns]=nsVal(d.ns,t.value);return}
  if(d.nm&&NS){const m=NS.meals[d.i];m[d.nm]=t.value;if(d.nm=='k'){if(!m.n||Object.values(MEALKN).includes(m.n))m.n=MEALKN[t.value];if(NS.admin)m.p=MKP[t.value]||20;redrawNS()}return}
  if(d.fd&&FD){FD[d.fd]=t.type=='checkbox'?(t.checked?1:0):t.value;return}
  if(d.fdt&&FD){const a=FD[d.fdt],i=a.indexOf(t.value);if(t.checked&&i<0)a.push(t.value);if(!t.checked&&i>=0)a.splice(i,1);return}
@@ -960,6 +974,8 @@ function wkTick(){clearInterval(WS.tk);WS.tk=setInterval(()=>{const w=wkCur();
      if(WS.rest.last){WS.rest=null;wkEnd(true)}else{rs.innerHTML='<span class="wkpulse" style="background:#fff;color:var(--ac);padding:5px 12px;border-radius:999px;font-size:18px">🔔 ¡Descanso listo! Siguiente serie</span>';setTimeout(()=>{WS.rest=null;const q=$('#wkrs');if(q)q.textContent=''},5000)}}}
    else rs.textContent=''}},500)}
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-w]');if(!t||t.disabled)return;wkUnlock();const k=t.dataset.w;
+ if(k=='install'){if(DEFER){DEFER.prompt();try{await DEFER.userChoice}catch(_){}DEFER=null;const b=$('#instbox');if(b)b.outerHTML=installBox()}return}
+ if(k=='units'){UNITS=t.dataset.k;try{localStorage.setItem(UK,UNITS)}catch(_){}clientView();return}
  if(k=='bell'){NT.open=!NT.open;if(NT.open){NT.read=Date.now();ntSave()}ntDraw();if(NT.open){const n=$('#ntn');if(n){n.textContent='';n.style.cssText=''}}return}
  if(k=='ntclear'){NT.items=[];ntSave();ntDraw();return}
  if(k=='ntgo'){NT.open=false;const p=$('#ntp');if(p)p.remove();cur=clients.find(c=>c.id==t.dataset.id);if(cur){tab='c';ptab='res';await adminView();scrollTo(0,0)}return}
@@ -1007,7 +1023,7 @@ async function clientHome(){const[a,b]=await Promise.all([sb.from('routines').se
  else if(L.length){const ds=Math.max(0,Math.floor((Date.now()-new Date(L[0].created_at))/DAY));dia=ds>=28?'Plan de 4 semanas terminado':`Día ${ds+1} de 28`}else dia='Tu rutina se está preparando';
  const tb=BD.filter(x=>tenureDays(me)>=x[0]).map(([t,nm,em])=>({nm,em})).concat(BP.filter(x=>L.length>=x[0]).map(([t,nm,em])=>({nm,em}))),got=[...tb,...achTrain().filter(x=>x.on)];
  const dl=daysLeft(me);
- $('#cb').innerHTML=`<div class="box"><div class="mut" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Tu plan</div><b style="font:700 26px 'Barlow Condensed'">${esc(pn)}</b><div style="margin-top:4px"><b>${esc(dia)}</b>${dl!=null&&dl>=0?` <span class="mut">· te quedan ${dl} días de acceso</span>`:''}</div></div>
+ $('#cb').innerHTML=`<div class="box"><div class="mut" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Tu plan</div><b style="font:700 26px 'Barlow Condensed'">${esc(pn)}</b><div style="margin-top:4px"><b>${esc(dia)}</b>${dl!=null&&dl>=0?` <span class="mut">· te quedan ${dl} días de acceso</span>`:''}</div></div>${installBox()}
  <div class="box"><b>Mi cumplimiento</b>${r?ringBox(st):'<p class="mut" style="margin:6px 0">Cuando tengas tu rutina verás aquí tu avance.</p>'}<button class="pri" data-a="ctab" data-t="t" style="width:100%;margin-top:12px">Ir a mi entreno</button></div>
  <div class="box"><b>Mis logros</b>${got.length?`<div class="bdg">${got.map(b=>`<div class="bd"><div class="em">${b.em}</div><b>${b.nm}</b></div>`).join('')}</div>`:'<p class="mut" style="margin:6px 0">Tu primer entreno cumplido desbloquea tu primer logro. Todos los logros están en tu Perfil.</p>'}</div>`}
 
@@ -1036,6 +1052,19 @@ async function ntPoll(){if(!me||me.role!='admin')return;const since=NT.since||ne
 function ntStart(){if(NT.tm||window.__noPoll)return;if(!NT.since){NT.since=new Date().toISOString()}NT.tm=setInterval(ntPoll,20000)}
 
 try{window.__nt={poll:ntPoll,get items(){return NT.items}}}catch(e){}
+
+/* ===== INSTALAR LA APP + UNIDADES ===== */
+let DEFER=null;
+const isStandalone=()=>{try{return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}catch(e){return false}};
+try{addEventListener('beforeinstallprompt',e=>{e.preventDefault();DEFER=e;const b=$('#instbox');if(b)b.outerHTML=installBox()});addEventListener('appinstalled',()=>{DEFER=null;const b=$('#instbox');if(b)b.remove()})}catch(e){}
+try{if('serviceWorker' in navigator&&location.protocol=='https:')addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}catch(e){}
+const platOf=()=>{const u=navigator.userAgent||'';return/iphone|ipad|ipod/i.test(u)||(navigator.platform=='MacIntel'&&navigator.maxTouchPoints>1)?'ios':/android/i.test(u)?'android':'desk'};
+function installBox(){if(isStandalone())return'';const p=platOf();
+ const steps=p=='ios'?['Toca el botón <b>Compartir</b> (el cuadro con una flecha hacia arriba) en la parte de abajo del navegador.','Desliza y elige <b>Añadir a pantalla de inicio</b>.','Toca <b>Añadir</b>. Ya tendrás el ícono de DuoFit como cualquier otra app.']
+  :p=='android'?['Toca los <b>tres puntos ⋮</b> de la esquina del navegador.','Elige <b>Instalar app</b> (o <b>Añadir a pantalla de inicio</b>).','Confirma. Ya tendrás el ícono de DuoFit en tu pantalla.']
+  :['En Chrome o Edge, busca el ícono de <b>instalar</b> al final de la barra de direcciones (o el menú ⋮ → <b>Instalar DuoFit App</b>).','Confirma. Se abrirá como una app aparte.'];
+ return`<div class="box" id="instbox"><b>📲 Instala la app en tu ${p=='desk'?'computadora':'teléfono'}</b><p class="mut" style="margin:4px 0">Entra más rápido, sin escribir la dirección y a pantalla completa.</p>${DEFER?'<button class="pri" data-w="install" style="width:100%">Instalar ahora</button>':''}<details${DEFER?'':' open'}><summary class="mut" style="cursor:pointer">${DEFER?'Ver cómo instalarla a mano':'Cómo instalarla'}</summary><ol style="margin:6px 0 0;padding-left:20px">${steps.map(s=>`<li style="margin:4px 0">${s}</li>`).join('')}</ol></details></div>`}
+const unitsBox=()=>`<div class="box"><b>Unidades</b><p class="mut" style="margin:4px 0">Elige cómo quieres ver tu peso, tus medidas y las porciones de comida.</p><div class="row"><button data-w="units" data-k="metric" class="${UNITS=='metric'?'pri':''}">Kilos y centímetros</button><button data-w="units" data-k="imperial" class="${UNITS=='imperial'?'pri':''}">Libras y pulgadas</button></div><p class="mut" style="font-size:12px;margin:6px 0 0">Se guarda en este dispositivo. Tu entrenador siempre ve tus datos en kilos y centímetros.</p></div>`;
 
 const COACH={nombre:'Lic. Manuel Amezcua',titulo:'Nutriólogo',esp:'Nutrición y asesoría deportiva',cedula:'10184091',mail:'soporte@duofitsystem.com'};
 const coachBox=()=>`<div class="box" style="text-align:left"><div class="mut" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Tu asesor</div><b style="font:700 24px 'Barlow Condensed'">${COACH.nombre}</b><div>${COACH.titulo} · ${COACH.esp}</div><div class="mut">Cédula profesional ${COACH.cedula}</div><div class="mut"><a href="mailto:${COACH.mail}">${COACH.mail}</a></div></div>`;
@@ -1200,7 +1229,7 @@ async function clientTrain(){const{data}=await sb.from('routines').select('*').o
 const adminUpg=c=>{const cr=basicCredit(c);return`<div class="box" style="margin-top:12px;border-color:var(--ac)"><b>Subir a plan personalizado</b><p class="mut" style="margin:4px 0">Crédito por el tiempo no usado del básico: <b>${mxn(cr)}</b>. Al convertir, el servicio pasa a Personalizado y el plan inicia hoy.</p><select id="upo">${upgOpts(c).map(o=>`<option value="${o[0]}">${esc(o[1])} · ${mxn(o[2])} → cobrar ${mxn(Math.max(0,o[2]-cr))}</option>`).join('')}</select><button class="pri" data-a="doUpg" style="margin-top:8px">Convertir a personalizado</button></div>`};
 const upgradeBox=()=>{const cr=basicCredit(me);return`<div class="box" style="border-color:var(--ac)"><b>Estás en el plan Básico</b><p class="mut" style="margin:6px 0">Tu rutina y tu menú se generan automáticamente (2 opciones por comida). Con el plan personalizado tu entrenador los arma para ti, los ajusta, tienes más opciones y equivalentes para cambiar ingredientes.</p>${cr?`<p style="margin:6px 0">Tu tiempo ya pagado se te abona: <b>${mxn(cr)}</b> de crédito.</p>`:''}${upgOpts(me).map(o=>`<div class="irow"><span class="n">${esc(o[1])}</span><span class="q">${mxn(o[2])}${cr?' → pagas '+mxn(Math.max(0,o[2]-cr)):''}</span></div>`).join('')}<button class="pri" data-a="upgrade" style="margin-top:8px">Quiero el plan personalizado</button></div>`};
 async function clientAccount(){await loadMyNotes();WALL=((await sb.from('workouts').select('*').eq('client_id',me.id)).data)||[];const{data}=await sb.from('routines').select('id,created_at').order('created_at',{ascending:false});
- $('#cb').innerHTML=`<div class="box"><b style="font:700 26px 'Barlow Condensed'">${esc(me.full_name)}</b><div class="mut">Usuario: ${esc(me.username)}</div><div class="mut">Correo: ${esc(MYMAIL||'sin correo')}</div>${planTags(me)}</div>${coachBox()}${me.service=='basico'?upgradeBox():''}${flowAccount()}<div class="box"><b>Mis datos</b><div class="row"><button data-a="intake">Cuestionario de salud</button><button data-a="n_myform">Datos de alimentación</button></div></div>${progressBox(data||[])}<div class="box"><b>Cambiar mi contraseña</b><div class="row"><input id="np1" type="password" placeholder="Nueva contraseña (mínimo 6)" autocomplete="new-password"><input id="np2" type="password" placeholder="Repítela" autocomplete="new-password"><button class="pri" data-a="chpw" style="flex:0 0 auto">Guardar</button></div><div class="err" id="pwerr"></div><p class="mut" style="margin:0">Si olvidas tu contraseña, usa «Olvidé mi contraseña» al entrar.</p></div><div class="box"><b>${MYMAIL&&!MYMAIL.endsWith(DOM)?'Cambiar mi correo':'Agregar mi correo'}</b><p class="mut" style="margin:4px 0">${MYMAIL&&!MYMAIL.endsWith(DOM)?'':'Tu cuenta aún no tiene correo real. Agrégalo para poder recuperar tu contraseña.'}</p><div class="row"><input id="nem" type="email" placeholder="tucorreo@ejemplo.com" autocapitalize="none"><button class="pri" data-a="savemail" style="flex:0 0 auto">Guardar</button></div><div class="err" id="memerr"></div></div><div class="box"><button onclick="out()">Cerrar sesión</button></div>`}
+ $('#cb').innerHTML=`<div class="box"><b style="font:700 26px 'Barlow Condensed'">${esc(me.full_name)}</b><div class="mut">Usuario: ${esc(me.username)}</div><div class="mut">Correo: ${esc(MYMAIL||'sin correo')}</div>${planTags(me)}</div>${coachBox()}${installBox()}${unitsBox()}${me.service=='basico'?upgradeBox():''}${flowAccount()}<div class="box"><b>Mis datos</b><div class="row"><button data-a="intake">Cuestionario de salud</button><button data-a="n_myform">Datos de alimentación</button></div></div>${progressBox(data||[])}<div class="box"><b>Cambiar mi contraseña</b><div class="row"><input id="np1" type="password" placeholder="Nueva contraseña (mínimo 6)" autocomplete="new-password"><input id="np2" type="password" placeholder="Repítela" autocomplete="new-password"><button class="pri" data-a="chpw" style="flex:0 0 auto">Guardar</button></div><div class="err" id="pwerr"></div><p class="mut" style="margin:0">Si olvidas tu contraseña, usa «Olvidé mi contraseña» al entrar.</p></div><div class="box"><b>${MYMAIL&&!MYMAIL.endsWith(DOM)?'Cambiar mi correo':'Agregar mi correo'}</b><p class="mut" style="margin:4px 0">${MYMAIL&&!MYMAIL.endsWith(DOM)?'':'Tu cuenta aún no tiene correo real. Agrégalo para poder recuperar tu contraseña.'}</p><div class="row"><input id="nem" type="email" placeholder="tucorreo@ejemplo.com" autocapitalize="none"><button class="pri" data-a="savemail" style="flex:0 0 auto">Guardar</button></div><div class="err" id="memerr"></div></div><div class="box"><button onclick="out()">Cerrar sesión</button></div>`}
 /* ===== PANEL ADMIN ===== */
 let tab='fl',rts=[],rid=null,rname='',busy=0,libQ='',libG='',libT='',libN=60,G0={goal:'hipertrofia',level:'principiante',sex:'mujer',days:3,place:'gym',split:'auto'};
 const copy=o=>JSON.parse(JSON.stringify(o)),LB={goal:'Objetivo',level:'Nivel',sex:'Sexo',days:'Días',place:'Lugar',split:'División'};
