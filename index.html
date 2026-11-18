@@ -938,7 +938,11 @@ function loginView(){app.innerHTML=`<div class="auth box"><div class="abrand">DU
  <div class="err" id="err"></div><button class="pri" id="go">Entrar</button><button data-a="toReg">Crear cuenta nueva</button><button data-a="forgot">Olvidé mi contraseña</button></div>${coachBox()}</div>`;
  $('#go').onclick=login;$('#p').onkeydown=e=>{if(e.key=='Enter')login()}}
 async function login(){const raw=$('#u').value.trim();if(!raw||!$('#p').value)return err('Escribe tu usuario y contraseña');
- let em;if(raw.includes('@'))em=mailOf(raw);else{const u=uname(raw);em=u+DOM;try{const r=await sb.rpc('login_email',{u});if(r.data)em=r.data}catch(e){}}
+ if(!raw.includes('@')){const u=uname(raw);let ok=false;
+  try{const r=await sb.functions.invoke('login',{body:{u,p:$('#p').value}});const se=r.data&&r.data.session;if(se){const x=await sb.auth.setSession({access_token:se.access_token,refresh_token:se.refresh_token});ok=!x.error}}catch(e){}
+  if(ok)return boot();
+  const{error}=await sb.auth.signInWithPassword({email:u+DOM,password:$('#p').value});return error?err('Usuario o contraseña incorrectos'):boot()}
+ const em=mailOf(raw);
  const{error}=await sb.auth.signInWithPassword({email:em,password:$('#p').value});error?err('Correo, usuario o contraseña incorrectos'):boot()}
 const PQ=()=>{const p=new URLSearchParams(location.search).get('plan');return['basico','pers_m','pers_m_dua','pers_a','pers_a_dua','cortesia'].includes(p)?p:'pers_m'};
 const regBanner=()=>{const p=PQ(),P=PLANC[p];return`<div class="alert" style="margin:0 0 10px"><b>${esc(P[0])}</b>${p=='basico'?' · tu rutina y tu menú se generan automáticamente al activarse tu acceso.':p=='cortesia'?' · acceso de colaboración con tu código.':' · después de crear tu cuenta pasarás al pago; tu acceso se activa al confirmarse.'}</div>`};
