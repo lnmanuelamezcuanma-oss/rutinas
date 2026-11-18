@@ -201,7 +201,7 @@ function gen(o){
  const rnd=rng(o.seed!=null?o.seed:(Math.random()*4294967296)>>>0);
  const lv=Math.max(0,LV.indexOf(o.level)),sx=SEXM[o.sex]?o.sex:'otro',tier=tierOf(o.place),g=GOALM[o.goal]?o.goal:'hipertrofia';
  const inj=new Set((o.injuries||[]).filter(k=>INJR[k])),ne=new Set(o.noEquip||[]),okE=e=>!ne.has(e.eq)&&!injBad(e,inj);
- const P=plan(o,sx,lv,g),avoid=o.avoid instanceof Set?o.avoid:new Set(o.avoid||[]);
+ const P=plan(o,sx,lv,g),avoid=o.avoid instanceof Set?o.avoid:new Set(o.avoid||[]);const ban=o.ban instanceof Set?o.ban:new Set(o.ban||[]);
  const ctx={used:new Set(),famU:{},app:{},main:{}},tw={};
  P.rows.forEach(d=>d.ms.forEach(x=>tw[x.m]=(tw[x.m]||0)+x.w));
  const cap=(g=='fuerza'?[5,7,8]:g=='hipertrofia'?[6,8,9]:[6,8,9])[lv]+(P.rows.length<=3?1:0);
@@ -225,7 +225,7 @@ function gen(o){
    if(slot==0&&role=='c'){if(MAINF[m]&&MAINF[m].includes(e.fam))w*=g=='fuerza'?3.5:2.5;if(uni.test(e.es))w*=.35}
    if(sub){const t=bt(e);w*=t==sub?1:t=='x'?.05:.03}
    if(dFam.has(e.fam))w*=.12;if(fu.has(e.fam))w*=.5;
-   if(ctx.used.has(e.es))w*=.08;if(avoid.has(e.es))w*=.35;
+   if(ctx.used.has(e.es))w*=.08;if(avoid.has(e.es))w*=.35;if(ban.has(e.es))w*=.02;
    if(/s/.test(e.f))w*=.7;
    return{e,w:w*w}});
   return wpick(a)}
@@ -244,7 +244,7 @@ function gen(o){
    else if(g=='pérdida de grasa'){s=lv==0?'2':'3';r='12-20';d='30-45 s'}
    else{s=lv==0?'2':lv==1?'2':'3';r='12-15';d='60 s'}}
   return{s,r,d}};
- const cardio=(di,kind)=>{const a=CAT.filter(e=>e.g=='Ca'&&e.t<=tier&&okE(e)&&LWT[lv][LI[e.lv]]>0&&e.f.includes(kind)).map(e=>{let w=LWT[lv][LI[e.lv]]*ew(e);if(ctx.used.has(e.es))w*=.1;if(avoid.has(e.es))w*=.4;return{e,w:w*w}});
+ const cardio=(di,kind)=>{const a=CAT.filter(e=>e.g=='Ca'&&e.t<=tier&&okE(e)&&LWT[lv][LI[e.lv]]>0&&e.f.includes(kind)).map(e=>{let w=LWT[lv][LI[e.lv]]*ew(e);if(ctx.used.has(e.es))w*=.1;if(avoid.has(e.es))w*=.4;if(ban.has(e.es))w*=.02;return{e,w:w*w}});
   const e=wpick(a);if(!e)return null;ctx.used.add(e.es);
   if(kind=='l'){const dur=g=='salud y tono'?['10-15 min','15-20 min','15-20 min'][lv]:['15-20 min','20-25 min','25-30 min'][lv];return{m:'Cardio',n:e.es,s:'1',r:dur,d:'',t:'Ritmo constante: podrías hablar con frases cortas'}}
   return{m:'Cardio',n:e.es,s:['6','8','10'][lv],r:lv==0?'20 s':'30 s',d:lv==0?'40 s':'30 s',t:lv==0?'Intervalos: 20 s fuerte y 40 s suave':'Intervalos: 30 s fuerte y 30 s suave'}};
@@ -766,7 +766,7 @@ Este menú es una guía general. Si tienes una condición médica, consúltalo c
 function genState(c,L){const exp=c.plan_end&&daysLeft(c)<0;if(exp)return'exp';const a=(L||[]).filter(x=>x.auto);return a.length&&String(a[0].created_at).slice(0,10)>=periodStart(c)?'done':'ok'}
 function autoRoutine(c,L,goal){const A=(L||[]).filter(r=>r.auto),n=A.length,start=Math.max(0,LV.indexOf(c.level)),lvl=Math.min(LV.length-1,start+Math.floor(n/2)),more=n%2==1;
  const avoid=new Set();A.slice(0,2).forEach(r=>((r.data&&r.data.days)||[]).forEach(d=>(d.ex||[]).forEach(x=>avoid.add(x.n))));
- const R=gen({goal:goal||c.goal,level:LV[lvl],sex:c.sex,days:c.days,place:c.place,split:'auto',avoid,injuries:arr(c.injuries),noEquip:arr(c.no_equip)});
+ const R=gen({goal:goal||c.goal,level:LV[lvl],sex:c.sex,days:c.days,place:c.place,split:'auto',avoid,ban:BAD,injuries:arr(c.injuries),noEquip:arr(c.no_equip)});
  if(more)R.days.forEach(d=>{let k=0;(d.ex||[]).forEach(x=>{const s=+x.s;if(x.m!='Cardio'&&k<3&&/^\d+$/.test(String(x.s))&&s>=2&&s<5){x.s=String(s+1);k++}})});
  R.auto={n:n+1,lvl:LV[lvl],more};
  return{name:`Plan básico ${n+1} · ${LV[lvl]}${more?' (más volumen)':''}`,data:R}}
@@ -896,60 +896,87 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-a]')
 
 /* ===== ENTRENO CON CRONÓMETRO Y CUMPLIMIENTO ===== */
 const MINW=15*60; // minutos mínimos para contar un día como cumplido (solo interno)
-let WS={cy:1,wk:1,wsel:1,rows:{},rid:null,act:null,rest:null,tk:null};
+let WS={cy:1,wk:1,wsel:1,rows:{},rid:null,act:null,rest:null,tk:null},BAD=new Set();
 const wkKey=(w,d)=>w+'-'+d;
 const fmtT=s=>{s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')};
 const wkSecs=w=>w&&w.ended_at?Math.round((new Date(w.ended_at)-new Date(w.started_at))/1000):w?Math.round((Date.now()-new Date(w.started_at))/1000):0;
 const wkDone=w=>!!(w&&w.ended_at&&wkSecs(w)>=MINW);
+const badOf=L=>{const s=new Set();(L||[]).forEach(w=>Object.values(w.ex||{}).forEach(x=>{if(x&&x.n&&(x.fb=='dolor'||x.fb=='mal'))s.add(x.n)}));return s};
 function wkCycle(r){let ci=me.service!='basico'?cycleInfo(me):null;if(ci&&!ci.pre)return{cy:ci.cycle,wk:ci.wk};
  const ds=Math.max(0,Math.floor((Date.now()-new Date(r.created_at))/DAY));return{cy:Math.floor(ds/28)+1,wk:Math.min(4,Math.floor(ds%28/7)+1)}}
 async function wkLoad(r){const c=wkCycle(r);const sameCy=WS.cy==c.cy&&WS.rid==r.id;WS.cy=c.cy;WS.wk=c.wk;WS.rid=r.id;if(!sameCy||!WS.wsel)WS.wsel=c.wk;
- const{data}=await sb.from('workouts').select('*').eq('client_id',me.id).eq('cycle',c.cy);WS.rows={};(data||[]).forEach(w=>WS.rows[wkKey(w.week,w.day)]=w)}
+ const{data}=await sb.from('workouts').select('*').eq('client_id',me.id);WS.rows={};(data||[]).filter(w=>w.cycle==c.cy).forEach(w=>WS.rows[wkKey(w.week,w.day)]=w);BAD=badOf(data)}
 const wkCur=()=>WS.rows[wkKey(WS.wsel,cday)];
-const restSecs=(e,r)=>{const t=String(e.d||r.rest||'');const m=t.match(/(\d+)(?:\s*[-–]\s*(\d+))?\s*(min|m\b|s|seg)?/i);if(!m)return 60;let n=+m[1];if(/^m/i.test(m[3]||'')||(!m[3]&&n<=5))n*=60;return n}
-function wkDayBody(r){const d=r.days[Math.min(cday,r.days.length-1)],w=wkCur(),run=w&&!w.ended_at,fut=WS.wsel>WS.wk,ex=(w&&w.ex)||{};
- const items=d.ex.filter(e=>e.n);const nd=items.filter((e,i)=>ex[i]&&ex[i].done).length;
- let st='';if(w&&w.ended_at)st=`<div class="alert" style="border-color:#1a8f3c"><b>✓ Entrenado</b> · ${Math.max(1,Math.round(wkSecs(w)/60))} min · ${nd} de ${items.length} ejercicios</div>`;
+const restSecs=(e,r)=>{if(e.m=='Cardio')return 0;const t=String(e.d||r.rest||'');const m=t.match(/(\d+)(?:\s*[-–]\s*(\d+))?\s*(min|m\b|s|seg)?/i);if(!m)return 60;let n=+m[1];if(/^m/i.test(m[3]||'')||(!m[3]&&n<=5))n*=60;return n}
+const setsOf=e=>Math.max(1,parseInt(e.s)||1);
+const wkItems=r=>r.days[Math.min(cday,r.days.length-1)].ex.filter(e=>e.n);
+const actNow=()=>WS.act?WS.act.acc+(WS.act.paused?0:(Date.now()-WS.act.t0)/1000):0;
+function wkDayBody(r){const d=r.days[Math.min(cday,r.days.length-1)],w=wkCur(),run=w&&!w.ended_at,fut=WS.wsel>WS.wk,ex=(w&&w.ex)||{},items=wkItems(r);
+ const nd=items.filter((e,i)=>ex[i]&&ex[i].done).length,busy=!!WS.act;
+ const startBtn=fut&&!w?'<p class="mut" style="margin:8px 0">Esta semana aún no llega.</p>':!w?'<button class="pri" data-w="start" style="width:100%;margin:8px 0;padding:14px;font-size:17px">▶ Iniciar entreno</button><p class="mut" style="font-size:12px;margin:0 0 8px">Al iniciar se activan el cronómetro y las series de cada ejercicio.</p>':run?'<div class="row" style="margin:8px 0"><button class="pri" data-w="end">Finalizar entreno</button><button data-w="reset">Reiniciar</button></div>':'';
+ const bar=run?`<div id="wkbar" style="position:sticky;top:0;z-index:5;background:var(--bar);color:#fff;border-radius:12px;padding:8px 12px;margin:6px 0;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>⏱ Total <b id="wkel">${fmtT(wkSecs(w))}</b> · Activo <b id="wkac">${fmtT((w.active_secs||0)+actNow())}</b></span><span id="wkrs" style="font-weight:700"></span></div>`:'';
+ let sum='';
+ if(w&&w.ended_at){const tot=wkSecs(w),ac=w.active_secs||0,pc=tot?Math.round(ac/tot*100):0;
+  sum=`<div class="box" style="border-color:#1a8f3c"><b>✓ Entreno terminado</b><p style="margin:6px 0">Tiempo total <b>${fmtT(tot)}</b> · Tiempo activo <b>${fmtT(ac)}</b> (${pc}% del total) · ${nd} de ${items.length} ejercicios</p><div class="bar"><i style="width:${Math.min(100,pc)}%"></i></div>
+  <p style="margin:10px 0 4px"><b>¿Qué tan difícil estuvo?</b></p><div class="row">${[1,2,3,4,5].map(k=>`<button data-w="rpe" data-k="${k}" class="${w.rpe==k?'pri':''}" style="flex:1">${k}</button>`).join('')}</div><div class="mut" style="font-size:12px;display:flex;justify-content:space-between"><span>1 muy fácil</span><span>5 muy difícil</span></div>
+  <p style="margin:10px 0 4px"><b>¿Algún ejercicio?</b> <span class="mut">(opcional)</span></p>${items.map((e,i)=>{const f=(ex[i]||{}).fb;return`<div style="margin-bottom:6px"><div style="font-size:13px"><b>${esc(e.n)}</b></div><div class="row">${[['dolor','💥 Me lastimó'],['mal','😕 No lo sentí bien'],['fav','⭐ Favorito']].map(([k,l])=>`<button data-w="fb" data-i="${i}" data-k="${k}" class="${f==k?'pri':''}" style="font-size:12px;flex:1">${l}</button>`).join('')}</div></div>`}).join('')}
+  <textarea id="wknote" rows="2" placeholder="Algo más que quieras contarle a tu asesor (opcional)" style="width:100%;margin-top:6px">${esc(w.note||'')}</textarea><button class="pri" data-w="savenote" style="margin-top:6px">Guardar comentarios</button><div class="row" style="margin-top:10px"><button data-w="reset">Reiniciar este día</button></div></div>`}
+ const rows=items.map((e,i)=>{const x=ex[i]||{},n=setsOf(e),sd=x.sets||0,rest=e.d||(e.m=='Cardio'?'':r.rest),here=WS.act&&WS.act.i==i&&WS.act.d==cday,fin=!!x.done;
+  let ctl;
+  if(!run)ctl='';
+  else if(here)ctl=`<button class="pri" data-w="fin" data-i="${i}">■ Terminar serie ${sd+1}</button><button data-w="pause">${WS.act.paused?'▶ Reanudar':'⏸ Pausar'}</button><b id="wkact" style="margin-left:4px">${fmtT(actNow())}</b>`;
+  else if(fin)ctl=`<span style="color:#1a8f3c;font-weight:700">✓ Hecho</span><button data-w="undo" data-i="${i}" style="font-size:12px">Deshacer</button>`;
+  else ctl=`<button data-w="act" data-i="${i}" ${busy?'disabled':''}>▶ Iniciar ${e.m=='Cardio'?'cardio':'serie '+(sd+1)+' de '+n}</button><button data-w="done" data-i="${i}" ${busy?'disabled':''} style="font-size:12px">Marcar hecho</button>`;
+  return`<div class="cv" style="flex-wrap:wrap"><div class="nm">${thumb(e.n)}<div><b>${esc(e.n)}</b><div class="mut">${esc(e.m)}${e.t?' · '+esc(e.t):''}</div></div></div><span style="text-align:right">${fmtR(e)}${rest?`<br><small>Descanso ${esc(rest)}</small>`:''}</span>${run?`<div style="flex:1 0 100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${ctl}${x.act?`<span class="mut" style="font-size:12px">activo ${fmtT(x.act)}</span>`:''}</div>`:''}</div>`}).join('');
  const head=`<div class="day"><div class="dh">${esc(d.name)}</div>${d.note?`<div class="dnote">${esc(d.note)}</div>`:''}`;
- const rows=items.map((e,i)=>{const x=ex[i]||{},rest=e.d||(e.m=='Cardio'?'':r.rest),on=run,rs=restSecs(e,r);
-  return`<div class="cv" style="flex-wrap:wrap"><div class="nm">${thumb(e.n)}<div><b>${esc(e.n)}</b><div class="mut">${esc(e.m)}${e.t?' · '+esc(e.t):''}</div></div></div><span style="text-align:right">${fmtR(e)}${rest?`<br><small>Descanso ${esc(rest)}</small>`:''}</span>
-  <div style="flex:1 0 100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><button data-w="done" data-i="${i}" ${on?'':'disabled'} class="${x.done?'pri':''}">${x.done?'✓ Hecho':'Marcar hecho'}</button><button data-w="act" data-i="${i}" ${on?'':'disabled'}>${WS.act&&WS.act.i==i&&WS.act.d==cday?'■ <span id="wkact">'+fmtT((Date.now()-WS.act.t0)/1000)+'</span>':'▶ Serie activa'}</button><button data-w="rest" data-i="${i}" data-s="${rs}" ${on?'':'disabled'}>⏱ Descanso ${rs}s</button>${x.act?`<span class="mut" style="font-size:12px">activo ${fmtT(x.act)}</span>`:''}</div></div>`}).join('');
- let foot='';
- if(fut)foot='<p class="mut">Esta semana aún no llega.</p>';
- else if(!w)foot='<button class="pri" data-w="start" style="width:100%;margin-top:10px">▶ Comenzar entreno</button><p class="mut" style="font-size:12px">Al comenzar se activan el cronómetro, el descanso y el tiempo activo de cada ejercicio.</p>';
- else if(run)foot='<div class="row" style="margin-top:10px"><button class="pri" data-w="end">Finalizar entreno</button><button data-w="reset">Reiniciar</button></div>';
- else foot='<div class="row" style="margin-top:10px"><button data-w="reset">Reiniciar este día</button></div>';
- const bar=run?`<div id="wkbar" style="position:sticky;top:0;z-index:5;background:var(--bar);color:#fff;border-radius:12px;padding:8px 12px;margin:6px 0;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>⏱ Entreno <b id="wkel">${fmtT(wkSecs(w))}</b></span><span id="wkrs" style="font-weight:700"></span></div>`:'';
- return bar+st+head+(fut&&!w?items.map(e=>`<div class="cv"><div class="nm">${thumb(e.n)}<div><b>${esc(e.n)}</b><div class="mut">${esc(e.m)}</div></div></div><span>${fmtR(e)}</span></div>`).join(''):rows)+'</div>'+foot}
+ return startBtn+bar+sum+head+rows+'</div>'}
 function wkBody(r){if(!(r&&r.days))return showR(null);const n=r.days.length;if(cday>=n)cday=0;
  const wp=`<div class="sp">${[1,2,3,4].map(k=>{const dn=r.days.filter((_,j)=>wkDone(WS.rows[wkKey(k,j)])).length;return`<button class="${k==WS.wsel?'on':''}" data-w="week" data-k="${k}"><b>Semana ${k}</b><small>${k==WS.wk?'actual · ':''}${dn}/${n}</small></button>`}).join('')}</div>`;
  const dp=n>1?`<div class="sp">${r.days.map((d,i)=>{const w=WS.rows[wkKey(WS.wsel,i)],mk=w&&w.ended_at?'✓ ':w?'▶ ':'';return`<button class="${i==cday?'on':''}" data-a="cday" data-d="${i}"><b>${mk}Día ${i+1}</b><small>${dayShort(d,i)}</small></button>`}).join('')}</div>`:'';
- return(r.note?`<details class="note"><summary><b>Cómo usar tu plan</b></summary><div class="nt2">${fmtNote(r.note)}</div></details>`:'')+wp+dp+'<div id="wkday">'+wkDayBody(r)+'</div>'}
-function wkRedraw(){const r=CL[0]&&CL[0].data;const b=$('#rbody');if(b&&r)b.innerHTML=wkBody(r);wkTick()}
-const wkSave=w=>{if(w&&w.id)sb.from('workouts').update({ex:w.ex,active_secs:w.active_secs||0}).eq('id',w.id).then(()=>{})};
-function wkStopAct(){const a=WS.act;if(!a)return;const w=WS.rows[wkKey(WS.wsel,a.d)];if(w){w.ex=w.ex||{};const x=w.ex[a.i]=w.ex[a.i]||{};const s=Math.round((Date.now()-a.t0)/1000);x.act=(x.act||0)+s;w.active_secs=(w.active_secs||0)+s;wkSave(w)}WS.act=null}
-function wkTick(){clearInterval(WS.tk);WS.tk=setInterval(()=>{const w=wkCur(),e=$('#wkel');
+ return wp+dp+'<div id="wkday">'+wkDayBody(r)+'</div>'+(r.note?`<details class="note"><summary><b>Cómo usar tu plan</b></summary><div class="nt2">${fmtNote(r.note)}</div></details>`:'')}
+function wkRedraw(){const nt=$('#wknote'),w0=wkCur();if(nt&&w0)w0.note=nt.value;const r=CL[0]&&CL[0].data;const b=$('#rbody');if(b&&r)b.innerHTML=wkBody(r);wkTick()}
+const wkSave=w=>{if(w&&w.id)sb.from('workouts').update({ex:w.ex,active_secs:w.active_secs||0,rpe:w.rpe||null,note:w.note||null}).eq('id',w.id).then(()=>{})};
+async function wkEnd(auto){const w=wkCur();if(!w||w.ended_at)return;const{data,error}=await sb.from('workouts').update({ended_at:new Date().toISOString(),ex:w.ex,active_secs:w.active_secs||0}).eq('id',w.id).select().single();if(error)return toast('No se pudo finalizar: '+error.message);
+ WS.rows[wkKey(WS.wsel,cday)]=data;WS.rest=null;WS.act=null;wkRedraw();toast(auto?'¡Terminaste todo el entreno! 💪':'¡Entreno registrado! 💪')}
+function wkFinishSet(){const a=WS.act,r=CL[0]&&CL[0].data,w=WS.rows[wkKey(WS.wsel,a.d)];if(!a||!r||!w)return;const items=wkItems(r),e=items[a.i],s=Math.round(actNow());
+ w.ex=w.ex||{};const x=w.ex[a.i]=w.ex[a.i]||{};x.n=e.n;x.act=(x.act||0)+s;w.active_secs=(w.active_secs||0)+s;x.sets=(x.sets||0)+1;if(x.sets>=setsOf(e))x.done=true;
+ WS.act=null;wkSave(w);const all=items.every((_,i)=>w.ex[i]&&w.ex[i].done),rs=restSecs(e,r);
+ if(all&&!rs){wkRedraw();return wkEnd(true)}
+ WS.rest=rs?{i:a.i,end:Date.now()+rs*1000,last:all}:null;wkRedraw()}
+function wkTick(){clearInterval(WS.tk);WS.tk=setInterval(()=>{const w=wkCur();
   if(!$('#wkday')){clearInterval(WS.tk);return}
-  if(e&&w&&!w.ended_at)e.textContent=fmtT(wkSecs(w));
-  const a=$('#wkact');if(a&&WS.act)a.textContent=fmtT((Date.now()-WS.act.t0)/1000);
-  const rs=$('#wkrs');if(rs){if(WS.rest){const left=Math.ceil((WS.rest.end-Date.now())/1000);if(left>0)rs.textContent='Descanso '+fmtT(left);else{rs.textContent='¡Listo! A la siguiente serie';if(!WS.rest.done){WS.rest.done=1;try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(_){}setTimeout(()=>{if(WS.rest&&WS.rest.done){WS.rest=null;const q=$('#wkrs');if(q)q.textContent=''}},4000)}}}else rs.textContent=''}},500)}
+  const e=$('#wkel');if(e&&w&&!w.ended_at)e.textContent=fmtT(wkSecs(w));
+  const ac=$('#wkac');if(ac&&w)ac.textContent=fmtT((w.active_secs||0)+actNow());
+  const a=$('#wkact');if(a&&WS.act)a.textContent=fmtT(actNow());
+  const rs=$('#wkrs');if(rs){if(WS.rest){const left=Math.ceil((WS.rest.end-Date.now())/1000);
+    if(left>0)rs.innerHTML='Descanso '+fmtT(left)+' <button data-w="skip" style="font-size:12px;padding:2px 8px">Saltar</button>';
+    else if(!WS.rest.done){WS.rest.done=1;try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(_){}
+     if(WS.rest.last){WS.rest=null;wkEnd(true)}else{rs.textContent='¡Descanso listo! Sigue con tu siguiente serie';setTimeout(()=>{WS.rest=null;const q=$('#wkrs');if(q)q.textContent=''},5000)}}}
+   else rs.textContent=''}},500)}
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-w]');if(!t||t.disabled)return;const k=t.dataset.w,r=CL[0]&&CL[0].data;if(!r)return;
- if(k=='week'){wkStopAct();WS.wsel=+t.dataset.k;wkRedraw();return}
+ if(k=='week'){WS.act=null;WS.wsel=+t.dataset.k;wkRedraw();return}
  if(k=='start'){t.disabled=true;const row={client_id:me.id,cycle:WS.cy,week:WS.wsel,day:cday};let{data,error}=await sb.from('workouts').insert(row).select().single();
   if(error){const q=await sb.from('workouts').select('*').eq('client_id',me.id).eq('cycle',WS.cy).eq('week',WS.wsel).eq('day',cday).maybeSingle();data=q.data}
   if(!data){t.disabled=false;return toast('No se pudo iniciar: '+(error?error.message:''))}
   WS.rows[wkKey(WS.wsel,cday)]=data;wkRedraw();return}
- const w=wkCur();if(!w)return;
- if(k=='done'){w.ex=w.ex||{};const x=w.ex[t.dataset.i]=w.ex[t.dataset.i]||{};x.done=!x.done;wkSave(w);wkRedraw();return}
- if(k=='act'){const i=+t.dataset.i;if(WS.act&&WS.act.i==i&&WS.act.d==cday)wkStopAct();else{wkStopAct();WS.act={i,d:cday,t0:Date.now()}}wkRedraw();return}
- if(k=='rest'){WS.rest={end:Date.now()+(+t.dataset.s)*1000};wkTick();return}
- if(k=='end'){wkStopAct();const{data,error}=await sb.from('workouts').update({ended_at:new Date().toISOString(),ex:w.ex,active_secs:w.active_secs||0}).eq('id',w.id).select().single();if(error)return toast('No se pudo finalizar: '+error.message);WS.rows[wkKey(WS.wsel,cday)]=data;WS.rest=null;wkRedraw();toast('¡Entreno registrado! 💪');return}
- if(k=='reset'){if(!t.dataset.sure){t.dataset.sure=1;t.textContent='¿Seguro? Se borra este día';return}wkStopAct();WS.rest=null;const{error}=await sb.from('workouts').delete().eq('id',w.id);if(error)return toast('No se pudo reiniciar');delete WS.rows[wkKey(WS.wsel,cday)];wkRedraw();toast('Día reiniciado');return}
+ const w=wkCur();if(!w)return;w.ex=w.ex||{};const i=+t.dataset.i,items=wkItems(r);
+ if(k=='act'){WS.rest=null;WS.act={i,d:cday,t0:Date.now(),acc:0,paused:false};wkRedraw();return}
+ if(k=='pause'&&WS.act){if(WS.act.paused){WS.act.t0=Date.now();WS.act.paused=false}else{WS.act.acc+=(Date.now()-WS.act.t0)/1000;WS.act.paused=true}wkRedraw();return}
+ if(k=='fin'){wkFinishSet();return}
+ if(k=='skip'){const l=WS.rest&&WS.rest.last;WS.rest=null;wkRedraw();if(l)wkEnd(true);return}
+ if(k=='done'){const x=w.ex[i]=w.ex[i]||{};x.n=items[i].n;x.done=true;x.sets=setsOf(items[i]);wkSave(w);if(items.every((_,j)=>w.ex[j]&&w.ex[j].done)){wkRedraw();return wkEnd(true)}wkRedraw();return}
+ if(k=='undo'){const x=w.ex[i];if(x){x.done=false;x.sets=0}wkSave(w);wkRedraw();return}
+ if(k=='end'){if(!t.dataset.sure){t.dataset.sure=1;t.textContent='¿Terminar ahora?';return}await wkEnd(false);return}
+ if(k=='rpe'){w.rpe=+t.dataset.k;wkSave(w);wkRedraw();return}
+ if(k=='fb'){const x=w.ex[i]=w.ex[i]||{};x.n=items[i].n;x.fb=x.fb==t.dataset.k?null:t.dataset.k;wkSave(w);BAD=badOf(Object.values(WS.rows));wkRedraw();return}
+ if(k=='savenote'){const nt=$('#wknote');w.note=nt?nt.value.trim():'';wkSave(w);toast('Gracias, tu asesor lo verá');return}
+ if(k=='reset'){if(!t.dataset.sure){t.dataset.sure=1;t.textContent='¿Seguro? Se borra este día';return}WS.act=null;WS.rest=null;const{error}=await sb.from('workouts').delete().eq('id',w.id);if(error)return toast('No se pudo reiniciar');delete WS.rows[wkKey(WS.wsel,cday)];wkRedraw();toast('Día reiniciado');return}
 });
 /* Cumplimiento para el admin */
 function wkAdmin(c){const L=WL||[];if(!L.length)return`<div class="box"><b>Cumplimiento de entrenos</b><p class="mut" style="margin:4px 0">Aún no hay entrenos registrados.</p></div>`;
- const tot=L.length,ok=L.filter(wkDone).length,secs=L.filter(w=>w.ended_at).map(wkSecs),avg=secs.length?Math.round(secs.reduce((a,b)=>a+b,0)/secs.length/60):0;
- return`<div class="box"><b>Cumplimiento de entrenos</b><p style="margin:4px 0">Cumplidos (${MINW/60}+ min): <b>${ok}</b> de ${tot} registrados · promedio ${avg} min</p>${L.slice(0,28).map(w=>{const s=wkSecs(w),fin=!!w.ended_at,okk=wkDone(w),n=Object.values(w.ex||{}).filter(x=>x.done).length;return`<div class="irow"><span class="n">C${w.cycle} · Sem ${w.week} · Día ${w.day+1}</span><span class="q">${fin?Math.round(s/60)+' min':'en curso'} · activo ${fmtT(w.active_secs||0)} · ${n} ej. · ${okk?'<b style="color:#1a8f3c">Cumplido</b>':fin?'<b style="color:#d6361f">Incompleto</b>':'—'}</span></div>`}).join('')}</div>`}
+ const tot=L.length,ok=L.filter(wkDone).length,fin=L.filter(w=>w.ended_at),avg=fin.length?Math.round(fin.map(wkSecs).reduce((a,b)=>a+b,0)/fin.length/60):0,aa=fin.length?Math.round(fin.map(w=>w.active_secs||0).reduce((a,b)=>a+b,0)/fin.length/60):0;
+ const bad=[...badOf(L)];
+ return`<div class="box"><b>Cumplimiento de entrenos</b><p style="margin:4px 0">Cumplidos (${MINW/60}+ min): <b>${ok}</b> de ${tot} registrados · promedio ${avg} min en total, ${aa} min activos</p>${bad.length?`<div class="alert"><b>Evitar en próximos planes:</b> ${bad.map(esc).join(', ')}</div>`:''}${L.slice(0,28).map(w=>{const s=wkSecs(w),fin=!!w.ended_at,okk=wkDone(w),ex=Object.values(w.ex||{}),n=ex.filter(x=>x.done).length,fv=ex.filter(x=>x.fb=='fav').map(x=>x.n),bd=ex.filter(x=>x.fb=='dolor'||x.fb=='mal').map(x=>(x.fb=='dolor'?'💥 ':'😕 ')+x.n);return`<div class="irow" style="flex-wrap:wrap"><span class="n">C${w.cycle} · Sem ${w.week} · Día ${w.day+1}</span><span class="q">${fin?Math.round(s/60)+' min':'en curso'} · activo ${fmtT(w.active_secs||0)} · ${n} ej. · ${w.rpe?'dificultad '+w.rpe+'/5 · ':''}${okk?'<b style="color:#1a8f3c">Cumplido</b>':fin?'<b style="color:#d6361f">Incompleto</b>':'—'}</span>${bd.length||fv.length||w.note?`<div class="mut" style="flex:1 0 100%;font-size:12px">${bd.map(esc).join(' · ')}${fv.length?' ⭐ '+fv.map(esc).join(', '):''}${w.note?' · “'+esc(w.note)+'”':''}</div>`:''}</div>`}).join('')}</div>`}
 
 const COACH={nombre:'Lic. Manuel Amezcua',titulo:'Nutriólogo',esp:'Nutrición y asesoría deportiva',cedula:'10184091',mail:'soporte@duofitsystem.com'};
 const coachBox=()=>`<div class="box" style="text-align:left"><div class="mut" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Tu asesor</div><b style="font:700 24px 'Barlow Condensed'">${COACH.nombre}</b><div>${COACH.titulo} · ${COACH.esp}</div><div class="mut">Cédula profesional ${COACH.cedula}</div><div class="mut"><a href="mailto:${COACH.mail}">${COACH.mail}</a></div></div>`;
@@ -1247,7 +1274,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-a]')
  case'pick':NS=null;cur=clients.find(c=>c.id==id);G0={goal:cur.goal,level:cur.level,sex:cur.sex,days:cur.days,place:cur.place,split:'auto'};R=rid=null;rname='';adminView();break;
  case'new':eday=0;R=rid=null;rname='';render();break;
  case'gen':{const av=new Set();if(T&&cur)rts.slice(0,2).forEach(r=>((r.data&&r.data.days)||[]).forEach(dd=>dd.ex.forEach(ee=>av.add(ee.n))));
-  eday=0;R=gen({...G0,avoid:av,...restrOf()});rid=null;rname=T?'Rutina '+G0.goal:'Plantilla '+G0.goal+' '+G0.days+' días';render();toast(R.msg||'Rutina generada (división: '+R.split+'). Revísala, edítala y guárdala.');break}
+  eday=0;R=gen({...G0,avoid:av,ban:cur&&T?badOf(WL):null,...restrOf()});rid=null;rname=T?'Rutina '+G0.goal:'Plantilla '+G0.goal+' '+G0.days+' días';render();toast(R.msg||'Rutina generada (división: '+R.split+'). Revísala, edítala y guárdala.');break}
  case'blank':eday=0;R={rest:'',note:'',days:[{name:'Día 1',note:'',ex:[]}]};rid=null;rname='';render();break;
  case'lt':{const p=tpls.find(z=>z.id==$('#tp').value);if(!p)return toast('Elige una plantilla primero');eday=0;const a2=adapt(p.routine,{place:G0.place,...restrOf()});R=a2.r;R.adj=a2.log;rid=null;rname=p.name;render();toast(a2.changed?'Plantilla cargada y ajustada: '+a2.changed+' ejercicio(s) cambiados o quitados. Revisa los ajustes y guarda.':'Plantilla cargada: no necesitó cambios. Guárdala para asignarla.');break}
  case'adapt':{const a2=adapt(R,{place:G0.place,...restrOf()});R=a2.r;R.adj=a2.log;render();toast(a2.changed?'Ajustada: '+a2.changed+' ejercicio(s) cambiados o quitados.':'No hizo falta cambiar nada.');break}
