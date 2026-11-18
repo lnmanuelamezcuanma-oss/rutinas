@@ -19,7 +19,7 @@
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1115;--pn:#181b21;--ink:#eceef2;--mut:#98a0ad;--ln:#2b303a;--in:#20242c;--bar:#0a0b0e;color-scheme:dark}}
 :root[data-theme="dark"]{--bg:#0f1115;--pn:#181b21;--ink:#eceef2;--mut:#98a0ad;--ln:#2b303a;--in:#20242c;--bar:#0a0b0e;color-scheme:dark}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 Barlow,system-ui,sans-serif}
+html{-webkit-text-size-adjust:100%}body{overflow-x:hidden;max-width:100vw;margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 Barlow,system-ui,sans-serif}
 button,input,select{font:inherit;color:inherit}
 input,select{background:var(--in);border:1px solid var(--ln);border-radius:6px;padding:8px 9px;width:100%;min-width:0}
 input:focus,select:focus,button:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
@@ -93,10 +93,10 @@ button{transition:background .15s,border-color .15s,color .15s,transform .06s}bu
 main>.tabsbar{padding:0;margin:0 0 14px}
 .tabsbar button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;padding:11px 14px;white-space:nowrap;font-weight:600;color:var(--mut)}
 .tabsbar button:hover{color:var(--ink)}.tabsbar button.on{color:var(--ink);border-bottom-color:var(--ac)}
-.bn{position:fixed;left:0;right:0;bottom:0;z-index:8;display:flex;background:var(--bar);border-top:1px solid #fff2;padding-bottom:env(safe-area-inset-bottom)}
+.bn{position:fixed;left:0;right:0;bottom:0;width:100%;box-sizing:border-box;-webkit-transform:translate3d(0,0,0);transform:translate3d(0,0,0);z-index:8;display:flex;background:var(--bar);border-top:1px solid #fff2;padding-bottom:env(safe-area-inset-bottom)}
 .bn button{flex:1;background:none;border:0;border-radius:0;color:#9aa3b2;padding:8px 2px 7px;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:2px}
 .bn button i{font-style:normal;font-size:21px;line-height:1}.bn button.on{color:#fff;box-shadow:inset 0 3px var(--ac)}
-.bn~main{padding-bottom:90px}
+.bn~main{padding-bottom:calc(84px + env(safe-area-inset-bottom));overflow-x:hidden}main button,main .box{max-width:100%}
 @media(min-width:760px){.bn{position:static;max-width:1068px;margin:12px auto 0;border-radius:12px;border:1px solid #fff2}.bn button{flex-direction:row;justify-content:center;gap:8px;font-size:14px;padding:12px}.bn~main{padding-bottom:16px}}
 .seg{display:inline-flex;border:1px solid var(--ln);border-radius:10px;overflow:hidden;background:var(--in);margin:6px 0}.seg button{border:0;border-radius:0;background:none;padding:8px 14px;font-weight:600;color:var(--mut)}.seg button.on{background:var(--ac);color:#fff}
 .sp{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;margin:6px 0 2px;scrollbar-width:thin}
@@ -1073,6 +1073,30 @@ const userBox=()=>`<div class="box"><b>Mi usuario</b><p class="mut" style="margi
 const adminUserBox=c=>`<div class="box"><b>Usuario</b><p class="mut" style="margin:4px 0">Actual: <b>${esc(c.username)}</b>. Si lo cambias, el cliente entra con el nuevo (misma contraseña).</p><div class="row"><input id="anu" placeholder="Nuevo usuario" autocapitalize="none" autocomplete="off"><button data-w="achuser" style="flex:0 0 auto">Cambiar usuario</button></div></div>`;
 let nut;document.addEventListener('input',e=>{const t=e.target;if(t.id!='nu'&&t.id!='anu')return;const v=uname(t.value);if(v!==t.value)t.value=v;if(t.id!='nu')return;clearTimeout(nut);nut=setTimeout(async()=>{const h=$('#nuh'),x=$('#nu');if(!h||!x)return;const u=x.value;if(u.length<3){h.textContent='';return}if(u==me.username){h.textContent='Ese ya es tu usuario';return}const r=await sb.rpc('username_free',{u});if(!$('#nu')||$('#nu').value!==u||r.error)return;h.style.color=r.data?'#1a8f3c':'#d6361f';h.textContent=r.data?'✓ Disponible':'✗ Ya está en uso'},350)});
 
+/* ===== Pre-pantalla obligatoria (onboarding) ===== */
+let GATEP=false;
+function gateNeeds(){const b=isBasic(me),m=FL.m[me.id]||[],p=FL.p[me.id]||[],L=[];
+ L.push(['intake','Cuestionario de salud','Lesiones y condiciones, para que tu rutina sea segura.',!!me.intake]);
+ L.push(['nutri','Datos de alimentación','Cómo comes, alergias y gustos, para armar tu menú.',!!me.nutri]);
+ if(!b){L.push(['peso','Peso actual','Tu punto de partida.',m.some(x=>x.weight)]);
+  L.push(['med','Medidas corporales','Cintura, cadera, pecho, brazo o muslo (al menos una).',m.some(x=>['waist','hip','chest','arm','thigh'].some(k=>x[k]))]);
+  L.push(['fotos','Fotos: frente, lado y espalda','Solo las ve tu entrenador.',new Set(p.map(x=>x.kind)).size>=3])}
+ return L}
+async function gateLoad(){try{const[a,p]=await Promise.all([sb.from('measures').select('d,weight,waist,hip,chest,arm,thigh').eq('client_id',me.id).order('d',{ascending:false}),sb.from('photos').select('kind').eq('client_id',me.id)]);FL.m[me.id]=a.data||[];FL.p[me.id]=p.data||[]}catch(e){}}
+/* ¿Debe ver la pre-pantalla? Clientes con plan ya iniciado no la ven (ya vienen en curso). */
+const gateOn=()=>me.role!='admin'&&!(!isBasic(me)&&me.plan_start)&&gateNeeds().some(x=>!x[3]);
+async function gateView(){await gateLoad();const L=gateNeeds(),miss=L.filter(x=>!x[3]);
+ if(!miss.length){GATEP=false;return false}
+ const done=L.length-miss.length;
+ app.innerHTML=`<div class="top"><span class="brand">DUO<b>FIT</b> APP</span><h1>Hola, ${esc((me.full_name||'').split(' ')[0])}</h1><button onclick="out()">Salir</button></div><main style="max-width:620px;margin:0 auto"><div class="box"><b style="font:700 26px 'Barlow Condensed'">Completa tu perfil para entrar</b><p class="mut" style="margin:6px 0 10px">Para armar tu plan necesito conocerte. Cuando termines todo esto se abre la app completa. Llevas ${done} de ${L.length}.</p><div class="bar"><i style="width:${Math.round(done/L.length*100)}%"></i></div></div>
+ ${L.map(x=>`<div class="box" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap${x[3]?';opacity:.6':''}"><div><b>${x[3]?'✅':'⬜'} ${x[1]}</b><div class="mut">${x[2]}</div></div>${x[3]?'':`<button class="pri" data-a="gate_go" data-k="${x[0]}">Llenar</button>`}</div>`).join('')}
+ ${GATEP?`<div class="box"><b>Tu progreso inicial</b><p class="mut" style="margin:4px 0">Guarda tu peso, medidas y fotos aquí abajo y luego toca “Revisar”.</p><div id="pg"></div><button class="pri" data-a="gate_chk" style="margin-top:10px">Revisar y continuar</button></div>`:''}</main>`;
+ if(GATEP){await loadProg(me.id);$('#pg').innerHTML=progressView(me.id)}
+ return true}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-a]');if(!t||!/^gate_/.test(t.dataset.a))return;
+ if(t.dataset.a=='gate_chk'){await gateLoad();clientView();return}
+ const k=t.dataset.k;if(k=='intake')return intakeView();if(k=='nutri')return nutriView();GATEP=true;await gateView();const el=$('#pg');if(el)el.scrollIntoView({behavior:'smooth'})});
+
 const COACH={nombre:'Lic. Manuel Amezcua',titulo:'Nutriólogo',esp:'Nutrición y asesoría deportiva',cedula:'10184091',mail:'soporte@duofitsystem.com'};
 const coachBox=()=>`<div class="box" style="text-align:left"><div class="mut" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Tu asesor</div><b style="font:700 24px 'Barlow Condensed'">${COACH.nombre}</b><div>${COACH.titulo} · ${COACH.esp}</div><div class="mut">Cédula profesional ${COACH.cedula}</div><div class="mut"><a href="mailto:${COACH.mail}">${COACH.mail}</a></div></div>`;
 /* ===== SESIÓN ===== */
@@ -1221,6 +1245,7 @@ async function clientView(){
  if(me.pay_status=='pendiente'&&me.access===false)return payView();
  if(me.access===false){app.innerHTML=`<div class="auth box"><div class="abrand">DUO<b>FIT</b> APP</div><h1>Acceso pausado</h1><p class="mut">Tu acceso a la app está pausado por ahora. Escríbele a tu asesor para reactivarlo.</p><button onclick="out()">Salir</button></div>`;return}
  if(me.plan_end&&daysLeft(me)<0)return expiredView();
+ if(me.role!='admin'){await gateLoad();if(gateOn()&&await gateView())return}
  navSave();
  app.innerHTML=`<div class="top"><span class="brand">DUO<b>FIT</b> APP</span><h1>Hola, ${esc((me.full_name||'').split(' ')[0])}</h1>${me.service=='basico'?'<span class="tg b" style="margin:0">Plan básico</span>':''}<button data-a="refresh">↻ Actualizar</button></div><nav class="bn">${CT.map(([k,i,l])=>`<button class="${ctab==k?'on':''}" data-a="ctab" data-t="${k}"><i>${i}</i>${l}</button>`).join('')}</nav><main>${planBanner(me)}${me.intake?'':'<div class="alert"><b>Falta tu cuestionario de salud.</b> Tu entrenador lo necesita para cuidar tus lesiones. <button class="pri" data-a="intake" style="margin-left:8px">Llenarlo ahora</button></div>'}<div id="flb"></div><div id="cb"><p class="mut">Cargando…</p></div></main>`;fillBanner();
  if(ctab=='p'){await loadProg(me.id);$('#cb').innerHTML=`<div id="pg">${progressView(me.id)}</div>`}else if(ctab=='a')await clientNutri();else if(ctab=='u')await clientAccount();else if(ctab=='i')await clientHome();else await clientTrain()}
