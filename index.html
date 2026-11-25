@@ -377,7 +377,7 @@ function progressView(cid){
  <div class="box"><b>Historial</b>${MS.length?`<div class="tw"><table class="tb"><tr><th>Fecha</th>${MET.map(m=>`<th>${m[1]}</th>`).join('')}<th></th></tr>${MS.slice().sort((a,b)=>String(a.d)<String(b.d)?1:-1).map(m=>`<tr>${ADM()?`<td><input type="date" class="ed" value="${String(m.d).slice(0,10)}" max="${todayISO()}" data-me="${m.id}" data-f="d" data-cid="${cid}"></td>`:`<td>${fd(dparse(m.d))}</td>`}${MET.map(([k])=>ADM()?`<td><input class="ed" inputmode="decimal" value="${m[k]==null?'':f1(uOut(+m[k],METN[k][2]))}" data-me="${m.id}" data-f="${k}" data-cid="${cid}" size="4"></td>`:`<td>${f1(m[k]==null?null:uOut(+m[k],METN[k][2]))}</td>`).join('')}<td><button data-a="delm" data-id="${m.id}" data-cid="${cid}" title="Borrar">×</button></td></tr>`).join('')}</table></div>`:'<p class="mut">Sin registros.</p>'}</div>
  <div class="box"><b>Fotos de progreso</b><p class="mut" style="margin:4px 0 0">Solo tú y tu entrenador pueden verlas. Usa buena luz y la misma pose en cada foto.</p>
  <div class="row"><div><label class="mut">Fecha</label><input type="date" id="p_d" value="${todayISO()}" max="${todayISO()}"></div><div><label class="mut">Foto de</label><select id="p_k">${KIND.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></div><div style="flex:2 1 220px"><label class="mut">Elegir foto o tomarla</label><input type="file" id="p_f" accept="image/*"></div></div>
- <div class="row"><button class="pri" data-a="upph" data-cid="${cid}">Subir foto</button><span class="mut" id="p_s"></span></div>
+ <div class="row"><button class="pri" data-a="upph" data-cid="${cid}">Subir foto</button><span class="mut" id="p_s"></span></div>${ADM()&&typeof batchBox=='function'?batchBox(cid):''}
  ${ph.length>=2?`<div style="margin-top:14px"><b>Comparar</b><div class="row"><div><label class="mut">Antes</label><select id="cmpA" data-cmp="A"><option value="">Elegir…</option>${opt}</select></div><div><label class="mut">Después</label><select id="cmpB" data-cmp="B"><option value="">Elegir…</option>${opt}</select></div></div><div class="cmp">${ca||cb?`<div>${imgT(ca)}</div><div>${imgT(cb)}</div>`:''}</div></div>`:''}
  <div class="pg">${ph.map(p=>`<div class="pt">${imgT(p)}${ADM()?`<div class="mut"><input type="date" class="ed" value="${String(p.d).slice(0,10)}" max="${todayISO()}" data-pe="${p.id}" data-f="d" data-cid="${cid}"> <select class="ed" data-pe="${p.id}" data-f="kind" data-cid="${cid}">${KIND.map(([k,l])=>`<option value="${k}"${k==p.kind?' selected':''}>${l}</option>`).join('')}</select> <button data-a="delph" data-id="${p.id}" data-cid="${cid}" title="Borrar">×</button></div></div>`:`<div class="mut">${fd(dparse(p.d))} · ${KN[p.kind]||p.kind} <button data-a="delph" data-id="${p.id}" data-cid="${cid}" title="Borrar">×</button></div></div>`}`).join('')||'<p class="mut">Aún no hay fotos.</p>'}</div></div>`}
 async function loadPhotoUrls(){const paths=PH.map(p=>p.path).filter(p=>!PU[p]);
@@ -1104,6 +1104,69 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-a]')
  if(t.dataset.a=='gate_chk'){await gateLoad();clientView();return}
  const k=t.dataset.k;if(k=='intake')return intakeView();if(k=='nutri')return nutriView();GATEP=true;await gateView();const el=$('#pg');if(el)el.scrollIntoView({behavior:'smooth'})});
 
+/* ===== Importar expediente (admin): SOLO AGREGA. Pega el JSON que te prepara Claude desde un PDF/foto ===== */
+let IMP=null;
+const importBox=c=>`<div class="box"><b>Importar expediente</b><p class="mut" style="margin:4px 0">Sube el PDF o la foto del expediente en tu chat con Claude y pídele “prepara el JSON de importación para ${esc(c.full_name)}”. Pega aquí lo que te devuelva, revisa el resumen y confirma. <b>Solo agrega</b>: no borra ni reemplaza lo que el cliente ya llenó. Las fotos se suben en la pestaña Progreso.</p><textarea id="imp_t" rows="5" placeholder='{"nutri":{…},"mediciones":[…],"plan":{…}}' style="width:100%;font-family:monospace;font-size:12px"></textarea><div class="row"><button data-a="imp_prev">Revisar</button></div><div id="imp_r"></div></div>`;
+function impParse(txt,c){let j;try{j=JSON.parse(txt.trim().replace(/^```(?:json)?|```$/g,'').trim())}catch(e){return{err:'No es un JSON válido: '+e.message}}
+ const up={},res=[],A=x=>Array.isArray(x)?x.map(String):[],S=x=>x==null?'':String(x).trim(),N=x=>{const v=parseFloat(String(x).replace(',','.'));return isFinite(v)?v:null};
+ const P=j.perfil||{};
+ [['goal',v=>GOALS[v]],['level',v=>LV.includes(v)],['sex',v=>SEX.includes(v)]].forEach(([k,f])=>{if(P[k]&&f(P[k])&&!c[k]){up[k]=P[k];res.push(k+': '+P[k])}});
+ if(P.days&&!c.days&&N(P.days)>=2&&N(P.days)<=6){up.days=N(P.days);res.push('Días: '+up.days)}
+ const I=j.intake;if(I&&!c.intake){const inj=A(I.inj).filter(k=>INJN[k]),cond=A(I.cond).filter(k=>CONDN[k]),noEq=A(I.noEq).filter(k=>EQ.some(e=>e[0]==k));
+  up.intake={inj,none:!inj.length&&!S(I.injT),injT:S(I.injT),cond,noc:!cond.length&&!S(I.condT),condT:S(I.condT),med:I.med=='si'?'si':'no',noEq,ok:true,at:new Date().toISOString()};up.injuries=inj;up.no_equip=noEq;
+  res.push('Cuestionario de salud (no tenía): lesiones '+(inj.map(k=>INJN[k]).join(', ')||'ninguna')+' · condiciones '+(cond.map(k=>CONDN[k]).join(', ')||'ninguna'))}
+ else if(I)res.push('Cuestionario de salud: ya existe, no se toca');
+ const Nn=j.nutri;if(Nn){const old=c.nutri||{},n={...old},add=[];
+  const put=(k,v,ok)=>{if(v!=null&&v!==''&&ok!==false&&(old[k]==null||old[k]===''||(Array.isArray(old[k])&&!old[k].length))){n[k]=v;add.push(k)}};
+  put('age',N(Nn.age));put('height',N(Nn.height));put('weight',N(Nn.weight));
+  put('act',String(Nn.act),ACT.some(a=>a[0]==String(Nn.act)));put('diet',Nn.diet,DIETS.some(d=>d[0]==Nn.diet));put('region',S(Nn.region));
+  {const al=A(Nn.allergies).filter(k=>ALLERGY.some(a=>a[0]==k));if(al.length)put('allergies',al);if(A(Nn.likes).length)put('likes',A(Nn.likes));if(A(Nn.dislikes).length)put('dislikes',A(Nn.dislikes))}
+  if(!old.meals||!old.meals.length){n.meals=presetMeals(PRESETS[N(Nn.comidas)]?N(Nn.comidas):4);add.push('comidas')}
+  if(add.length){up.nutri=n;res.push('Alimentación: se completan solo los campos vacíos ('+add.join(', ')+')')}else res.push('Alimentación: ya estaba completa, no se toca')}
+ const ms=[];(Array.isArray(j.mediciones)?j.mediciones:[]).forEach(m=>{const d=S(m.d);if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d>todayISO())return;const row={client_id:c.id,d,note:S(m.note)||null};let n=0;
+  MET.forEach(([k])=>{const v=N(m[k]);if(v!=null&&v>=RNG[k][0]&&v<=RNG[k][1]){row[k]=v;n++}});if(n)ms.push(row)});
+ if(ms.length)res.push(`Mediciones: ${ms.length} (${ms.map(m=>m.d).sort().join(', ')}); si ya existe una de esa fecha se omite`);
+ let plan=null;const PL=j.plan;if(PL&&Array.isArray(PL.slots)&&PL.slots.length){plan=PL;const nf=(Array.isArray(PL.foods)?PL.foods:[]).filter(f=>!fobj(f.n)).length,no=PL.slots.reduce((a,s)=>a+(s.opts||[]).length,0);
+  res.push(`Plan de alimentación nuevo “${S(PL.title)||'Plan'}”: ${PL.slots.length} tiempos, ${no} opciones${nf?`, y se crean ${nf} alimentos nuevos en tu base`:''}. Los planes que ya tiene se conservan.`)}
+ if(!res.length)return{err:'No encontré datos para importar en ese texto.'};
+ return{up,ms,res,plan}}
+async function impPlan(PL,c){const S=x=>String(x==null?'':x).trim();
+ const nf=(PL.foods||[]).filter(f=>S(f.n)&&!fobj(f.n));
+ if(nf.length){const rows=nf.map(f=>({data:{n:S(f.n),g:f.g||'lib',k:+f.k||0,p:+f.p||0,c:+f.c||0,f:+f.f||0,u:S(f.u),ug:+f.ug||0,w:0,t:[],r:[]}}));
+  const r=await sb.from('custom_foods').insert(rows);if(r.error)throw new Error('Alimentos nuevos: '+r.error.message);await loadCustom(true)}
+ const Pp={diet:'omnivoro',allergies:[],likes:[],dislikes:[]},rnd=Math.random,missing=[];
+ const slots=PL.slots.map(s=>({k:S(s.k)||'col',n:S(s.n),h:S(s.h),opts:(s.opts||[]).map(o=>{const items=[];(o.i||[]).forEach(([n,g])=>{const f=fobj(n);if(f)items.push(itemOf(f,+g||1));else missing.push(n)});
+   const op={r:S(o.r),t:o.t||'',st:S(o.st),items,...sumItems(items)};enrichOpt(op,Pp,rnd);return op})}));
+ slots.forEach(s=>{s.kcal=s.opts.length?s.opts[0].k:0});
+ const T=slots.reduce((a,s)=>{const o=s.opts[0];if(o){a.k+=o.k;a.p+=o.p;a.c+=o.c;a.f+=o.f}return a},{k:0,p:0,c:0,f:0});
+ const data={v:1,k:Math.round(T.k),p:Math.round(T.p),c:Math.round(T.c),f:Math.round(T.f),slots,note:S(PL.note)||DIET_NOTE,adj:missing.length?['Alimentos que no se encontraron y quedaron fuera: '+[...new Set(missing)].join(', ')]:[]};
+ const q=await sb.from('meal_plans').insert({client_id:c.id,title:S(PL.title)||'Plan importado',data});if(q.error)throw new Error('Plan: '+q.error.message);return data}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-a]');if(!t||!/^imp_/.test(t.dataset.a)||!cur)return;const out=$('#imp_r');
+ if(t.dataset.a=='imp_prev'){IMP=impParse($('#imp_t').value||'',cur);out.innerHTML=IMP.err?`<div class="alert">${esc(IMP.err)}</div>`:`<div class="alert" style="margin-top:8px"><b>Se va a agregar:</b><br>${IMP.res.map(esc).join('<br>')}</div><div class="row"><button class="pri" data-a="imp_go">Confirmar e importar</button></div>`;return}
+ if(t.dataset.a=='imp_go'&&IMP&&!IMP.err){const{up,ms,plan}=IMP;IMP=null;t.disabled=true;
+  try{if(Object.keys(up).length){const r=await sb.from('profiles').update(up).eq('id',cur.id);if(r.error)throw new Error(r.error.message)}
+   if(ms.length){const ex=(await sb.from('measures').select('d').eq('client_id',cur.id)).data||[],have=new Set(ex.map(x=>String(x.d).slice(0,10))),nw=ms.filter(m=>!have.has(m.d));
+    if(nw.length){const r=await sb.from('measures').insert(nw);if(r.error)throw new Error(r.error.message)}}
+   let pd=null;if(plan)pd=await impPlan(plan,cur);
+   await load();keepY(render);toast('Importado'+(pd?` · plan de ${pd.k} kcal`:''))}
+  catch(er){toast('No se pudo importar: '+(er.message||er));t.disabled=false}}});
+
+/* ===== Subida de fotos en lote (admin): lee fecha y tipo del nombre del archivo ===== */
+const MESES={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,sept:9,oct:10,nov:11,dic:12};
+function fotoInfo(name){const n=name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\.[a-z0-9]+$/,'');let kind='frente';if(/espalda/.test(n))kind='espalda';else if(/lado|perfil/.test(n))kind='lado';else if(/frente|front/.test(n))kind='frente';
+ let d='';const m=n.match(/(\d{1,2})[_\s-]*(?:de[_\s-]*)?([a-z]{3,10})[_\s-]*(?:de[_\s-]*)?(\d{2,4})/);if(m){const mo=MESES[m[2]]||MESES[m[2].slice(0,3)];let y=+m[3];if(y<100)y+=2000;if(mo&&+m[1]>=1&&+m[1]<=31)d=`${y}-${String(mo).padStart(2,'0')}-${String(+m[1]).padStart(2,'0')}`}return{kind,d}}
+const batchBox=cid=>`<div class="box"><b>Subir fotos en lote</b><p class="mut" style="margin:4px 0">Elige varias fotos. La app lee la fecha y el tipo del nombre del archivo (por ejemplo “11_sept_26_frente.jpg”); revísalos y corrígelos antes de subir.</p><input type="file" id="bp_f" accept="image/*" multiple><div id="bp_l"></div></div>`;
+let BPH=[];
+document.addEventListener('change',e=>{if(e.target.id!='bp_f')return;BPH=[...e.target.files].map(f=>({f,...fotoInfo(f.name)}));const el=$('#bp_l');
+ el.innerHTML=BPH.length?`<div style="margin-top:8px">${BPH.map((p,i)=>`<div class="row" style="align-items:center;margin:4px 0"><span class="mut" style="flex:2 1 160px;word-break:break-all">${esc(p.f.name)}</span><input type="date" data-bp="${i}" data-f="d" value="${p.d}" max="${todayISO()}"><select data-bp="${i}" data-f="kind">${KIND.map(([k,l])=>`<option value="${k}"${k==p.kind?' selected':''}>${l}</option>`).join('')}</select></div>`).join('')}<div class="row"><button class="pri" data-a="bp_go" data-cid="${cur?cur.id:''}">Subir ${BPH.length} fotos</button><span class="mut" id="bp_s"></span></div></div>`:''});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.bp!=null)BPH[+t.dataset.bp][t.dataset.f]=t.value});
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-a="bp_go"]');if(!t)return;const cid=t.dataset.cid;if(!cid||!BPH.length)return;
+ if(BPH.some(p=>!p.d))return toast('Falta la fecha en alguna foto');t.disabled=true;const s=$('#bp_s');let n=0;
+ try{for(const p of BPH){if(s)s.textContent=`Subiendo ${n+1} de ${BPH.length}…`;const blob=await resizeImg(p.f),path=`${cid}/${Date.now()}_${n}_${p.kind}.jpg`;
+   const u=await sb.storage.from('progress').upload(path,blob,{contentType:'image/jpeg'});if(u.error)throw u.error;
+   const r=await sb.from('photos').insert({client_id:cid,d:p.d,kind:p.kind,path});if(r.error){await sb.storage.from('progress').remove([path]);throw r.error}n++}
+  BPH=[];await refreshProg(cid);toast(n+' fotos subidas')}catch(er){t.disabled=false;toast(`Se subieron ${n}; error: `+(er.message||er))}});
+
 const COACH={nombre:'Lic. Manuel Amezcua',titulo:'Nutriólogo',esp:'Nutrición y asesoría deportiva',cedula:'10184091',mail:'soporte@duofitsystem.com'};
 const coachBox=()=>`<div class="box" style="text-align:left"><div class="mut" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Tu asesor</div><b style="font:700 24px 'Barlow Condensed'">${COACH.nombre}</b><div>${COACH.titulo} · ${COACH.esp}</div><div class="mut">Cédula profesional ${COACH.cedula}</div><div class="mut"><a href="mailto:${COACH.mail}">${COACH.mail}</a></div></div>`;
 /* ===== SESIÓN ===== */
@@ -1312,7 +1375,7 @@ const trainTab=()=>trainInfo(cur)+`<div class="box"><b>Rutinas del cliente (${rt
 const clientPanel=()=>{const c=cur;
  const head=`<div class="box"><div class="chead"><div><button class="onlym" data-a="toList" style="margin-bottom:8px">← Todos los clientes</button><div style="font:700 28px 'Barlow Condensed'">${esc(c.full_name)}</div><span class="mut">usuario: ${esc(c.username)} · ${c.service=='basico'?'plan básico':'plan personalizado'}</span></div><div>${tagsOf(c)}</div></div></div>`;
  const tabs=`<nav class="tabsbar">${[['res','Resumen'],['cu','Cuestionario'],['tr','Entrenamiento'],['nu','Nutrición'],['pr','Progreso'],['ac','Cuenta']].map(([k,l])=>`<button class="${ptab==k?'on':''}" data-a="ptab" data-t="${k}">${l}</button>`).join('')}</nav>`;
- const body=ptab=='tr'?trainTab():ptab=='nu'?nutAlert(c)+nutBox():ptab=='pr'?`<div class="box"><div id="pg">${progressView(c.id)}</div></div>`:ptab=='cu'?healthBox(c):ptab=='ac'?planBox(c)+adminUserBox(c)+accountBox(c):flowPanel(c)+keyBox(c)+wkAdmin(c)+notesAdmin(c);
+ const body=ptab=='tr'?trainTab():ptab=='nu'?nutAlert(c)+nutBox():ptab=='pr'?`<div class="box"><div id="pg">${progressView(c.id)}</div></div>`:ptab=='cu'?healthBox(c):ptab=='ac'?planBox(c)+importBox(c)+adminUserBox(c)+accountBox(c):flowPanel(c)+keyBox(c)+wkAdmin(c)+notesAdmin(c);
  return head+tabs+body};
 const sel=(k,h)=>`<div><label class="mut">${LB[k]}</label><select data-g="${k}">${h}</select></div>`;
 const restr=()=>{if(!(tab=='c'&&cur))return'';const a=realInj(cur).map(k=>INJN[k]),b=arr(cur.no_equip).map(k=>EQN[k]);return a.length||b.length?`<p class="mut" style="margin:8px 0 0">Se aplicarán a este cliente: ${a.length?'evitar '+a.join(', ').toLowerCase():''}${a.length&&b.length?' · ':''}${b.length?'sin '+b.join(', ').toLowerCase():''}.</p>`:''};
