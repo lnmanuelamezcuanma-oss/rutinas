@@ -368,7 +368,7 @@ const ADM=()=>typeof me!=='undefined'&&me&&me.role=='admin';
 function progressView(cid){
  const ph=PH.slice().sort((a,b)=>a.d<b.d?1:-1),opt=ph.map(p=>`<option value="${p.id}">${fd(dparse(p.d))} · ${KN[p.kind]||p.kind}</option>`).join('');
  const ca=PH.find(p=>p.id==cmpA),cb=PH.find(p=>p.id==cmpB);
- const imgT=p=>p&&PU[p.path]?`<img class="pimg" src="${esc(PU[p.path])}" alt="${esc(KN[p.kind]||p.kind)}" data-a="zoom" data-u="${esc(PU[p.path])}">`:'<div class="pimg ph2">Sin imagen</div>';
+ const imgT=p=>p&&PU[p.path]?`<img class="pimg" loading="lazy" decoding="async" src="${esc(PU[p.path])}" alt="${esc(KN[p.kind]||p.kind)}" data-a="zoom" data-u="${esc(PU[p.path])}">`:'<div class="pimg ph2">Sin imagen</div>';
  return`<div class="box"><b>Mi evolución</b>${summary()}</div>
  <div class="box"><b>Registrar medición</b><p class="mut" style="margin:4px 0 0">Llena solo lo que tengas. Mídete siempre a la misma hora y en las mismas condiciones (por ejemplo, en ayunas).</p>
  <div class="row"><div><label class="mut">Fecha</label><input type="date" id="m_d" value="${todayISO()}" max="${todayISO()}"></div>${MET.map(([k,n,u])=>mInput(k,n,u)).join('')}<div style="flex:2 1 220px"><label class="mut">Nota (opcional)</label><input id="m_note" placeholder="Ej. después de vacaciones"></div></div>
@@ -1337,9 +1337,12 @@ async function clientAccount(){await loadMyNotes();WALL=((await sb.from('workout
 let tab='fl',rts=[],rid=null,rname='',busy=0,libQ='',libG='',libT='',libN=60,G0={goal:'hipertrofia',level:'principiante',sex:'mujer',days:3,place:'gym',split:'auto'};
 const copy=o=>JSON.parse(JSON.stringify(o)),LB={goal:'Objetivo',level:'Nivel',sex:'Sexo',days:'Días',place:'Lugar',split:'División'};
 function toast(m){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t)}t.textContent=m;t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',5000)}
-async function load(){const[a,b,c]=await Promise.all([sb.from('profiles').select('*').eq('role','client').order('created_at',{ascending:false}),sb.from('templates').select('*').order('name'),sb.from('routines').select('client_id,created_at')]);clients=(a.data||[]).map(normC);tpls=b.data||[];RC={};await loadFlow();
+async function load(){const cid=cur&&cur.id;
+ const[a,b,c,rr,,ww]=await Promise.all([sb.from('profiles').select('*').eq('role','client').order('created_at',{ascending:false}),sb.from('templates').select('*').order('name'),sb.from('routines').select('client_id,created_at'),
+  cid?sb.from('routines').select('*').eq('client_id',cid).order('created_at',{ascending:false}):null,cid?loadProg(cid):null,cid?sb.from('workouts').select('*').eq('client_id',cid).order('started_at',{ascending:false}):null,loadFlow(),loadNut()]);
+ clients=(a.data||[]).map(normC);tpls=b.data||[];RC={};
  (c.data||[]).forEach(r=>{const k=RC[r.client_id]=RC[r.client_id]||{n:0,last:null};k.n++;if(!k.last||r.created_at>k.last)k.last=r.created_at});rts=[];
- if(cur){cur=clients.find(z=>z.id==cur.id)||null;if(cur){rts=(await sb.from('routines').select('*').eq('client_id',cur.id).order('created_at',{ascending:false})).data||[];await loadProg(cur.id);WL=((await sb.from('workouts').select('*').eq('client_id',cur.id).order('started_at',{ascending:false})).data)||[]}}await loadNut()}
+ if(cur){cur=clients.find(z=>z.id==cur.id)||null;if(cur){rts=(rr&&rr.data)||[];WL=(ww&&ww.data)||[]}}}
 const arr=a=>Array.isArray(a)?a:[];
 const realInj=c=>arr(c.injuries).filter(k=>INJR[k]);
 function tagsOf(c){const t=[],k=RC[c.id];
@@ -1472,7 +1475,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-a]')
  case'xm':$('#mdl').style.display='none';break;
  case'more':libN+=60;fillLib();break;
  case'tab':tab=t.dataset.t;R=rid=null;rname='';adminView();break;
- case'pick':NS=null;cur=clients.find(c=>c.id==id);G0={goal:cur.goal,level:cur.level,sex:cur.sex,days:cur.days,place:cur.place,split:'auto'};R=rid=null;rname='';adminView();break;
+ case'pick':NS=null;cur=clients.find(c=>c.id==id);G0={goal:cur.goal,level:cur.level,sex:cur.sex,days:cur.days,place:cur.place,split:'auto'};R=rid=null;rname='';rts=[];MS=[];PH=[];WL=[];NPLANS=[];render();ntStart();ntDraw();await load();render();break;
  case'new':eday=0;R=rid=null;rname='';render();break;
  case'gen':{const av=new Set();if(T&&cur)rts.slice(0,2).forEach(r=>((r.data&&r.data.days)||[]).forEach(dd=>dd.ex.forEach(ee=>av.add(ee.n))));
   eday=0;R=gen({...G0,avoid:av,ban:cur&&T?badOf(WL):null,...restrOf()});rid=null;rname=T?'Rutina '+G0.goal:'Plantilla '+G0.goal+' '+G0.days+' días';render();toast(R.msg||'Rutina generada (división: '+R.split+'). Revísala, edítala y guárdala.');break}
