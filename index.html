@@ -1082,6 +1082,8 @@ let nut;document.addEventListener('input',e=>{const t=e.target;if(t.id!='nu'&&t.
 
 /* ===== Pre-pantalla obligatoria (onboarding) ===== */
 let GATEP=false;
+/* Rellena con valores por defecto los datos de alimentación incompletos (para que ninguna pantalla se rompa) */
+function normC(c){if(c&&c.nutri&&typeof c.nutri=='object'){const n=c.nutri;['allergies','likes','dislikes'].forEach(k=>{if(!Array.isArray(n[k]))n[k]=[]});if(!n.diet)n.diet='omnivoro';if(!n.act)n.act='1.375';if(n.region==null)n.region='';if(!Array.isArray(n.meals)||!n.meals.length)n.meals=presetMeals(4)}return c}
 function gateNeeds(){const b=isBasic(me),m=FL.m[me.id]||[],p=FL.p[me.id]||[],L=[];
  L.push(['intake','Cuestionario de salud','Lesiones y condiciones, para que tu rutina sea segura.',!!me.intake]);
  L.push(['nutri','Datos de alimentación','Cómo comes, alergias y gustos, para armar tu menú.',!!me.nutri]);
@@ -1116,7 +1118,7 @@ function impParse(txt,c){let j;try{j=JSON.parse(txt.trim().replace(/^```(?:json)
   up.intake={inj,none:!inj.length&&!S(I.injT),injT:S(I.injT),cond,noc:!cond.length&&!S(I.condT),condT:S(I.condT),med:I.med=='si'?'si':'no',noEq,ok:true,at:new Date().toISOString()};up.injuries=inj;up.no_equip=noEq;
   res.push('Cuestionario de salud (no tenía): lesiones '+(inj.map(k=>INJN[k]).join(', ')||'ninguna')+' · condiciones '+(cond.map(k=>CONDN[k]).join(', ')||'ninguna'))}
  else if(I)res.push('Cuestionario de salud: ya existe, no se toca');
- const Nn=j.nutri;if(Nn){const old=c.nutri||{},n={...old},add=[];
+ const Nn=j.nutri;if(Nn){const old=c.nutri||{},n={allergies:[],likes:[],dislikes:[],diet:'omnivoro',act:'1.375',region:'',...old},add=[];
   const put=(k,v,ok)=>{if(v!=null&&v!==''&&ok!==false&&(old[k]==null||old[k]===''||(Array.isArray(old[k])&&!old[k].length))){n[k]=v;add.push(k)}};
   put('age',N(Nn.age));put('height',N(Nn.height));put('weight',N(Nn.weight));
   put('act',String(Nn.act),ACT.some(a=>a[0]==String(Nn.act)));put('diet',Nn.diet,DIETS.some(d=>d[0]==Nn.diet));put('region',S(Nn.region));
@@ -1195,7 +1197,7 @@ function newPwView(){app.innerHTML=`<div class="auth box"><div class="abrand">DU
   const r=await sb.auth.updateUser({password:a});if(r.error)return err('No se pudo guardar: '+r.error.message);
   RECOV=false;history.replaceState(null,'',location.pathname);boot()}}
 async function boot(){const{data:{user}}=await sb.auth.getUser();if(!user)return authView();MYMAIL=user.email||'';
- const{data}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();me=data;
+ const{data}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();me=normC(data);
  if(!me){app.innerHTML=`<div class="auth box"><div class="abrand">DUO<b>FIT</b> APP</div><h1>Perfil no encontrado</h1><p class="mut">Tu cuenta existe pero no tiene perfil. Crea una cuenta nueva con otro usuario.</p><button onclick="out()">Salir</button>${coachBox()}</div>`;return}
  const nv=navLoad();if(nv.uid==me.id){if(me.role=='admin'){tab=nv.tab||'fl';ptab=nv.ptab||'res';if(nv.cid&&!cur)cur={id:nv.cid}}else ctab=nv.ctab||'t'}
  try{const st=await sb.from('app_settings').select('*');SET={};(st.data||[]).forEach(r=>SET[r.key]=r.value)}catch(e){}
@@ -1335,7 +1337,7 @@ async function clientAccount(){await loadMyNotes();WALL=((await sb.from('workout
 let tab='fl',rts=[],rid=null,rname='',busy=0,libQ='',libG='',libT='',libN=60,G0={goal:'hipertrofia',level:'principiante',sex:'mujer',days:3,place:'gym',split:'auto'};
 const copy=o=>JSON.parse(JSON.stringify(o)),LB={goal:'Objetivo',level:'Nivel',sex:'Sexo',days:'Días',place:'Lugar',split:'División'};
 function toast(m){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t)}t.textContent=m;t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',5000)}
-async function load(){const[a,b,c]=await Promise.all([sb.from('profiles').select('*').eq('role','client').order('created_at',{ascending:false}),sb.from('templates').select('*').order('name'),sb.from('routines').select('client_id,created_at')]);clients=a.data||[];tpls=b.data||[];RC={};await loadFlow();
+async function load(){const[a,b,c]=await Promise.all([sb.from('profiles').select('*').eq('role','client').order('created_at',{ascending:false}),sb.from('templates').select('*').order('name'),sb.from('routines').select('client_id,created_at')]);clients=(a.data||[]).map(normC);tpls=b.data||[];RC={};await loadFlow();
  (c.data||[]).forEach(r=>{const k=RC[r.client_id]=RC[r.client_id]||{n:0,last:null};k.n++;if(!k.last||r.created_at>k.last)k.last=r.created_at});rts=[];
  if(cur){cur=clients.find(z=>z.id==cur.id)||null;if(cur){rts=(await sb.from('routines').select('*').eq('client_id',cur.id).order('created_at',{ascending:false})).data||[];await loadProg(cur.id);WL=((await sb.from('workouts').select('*').eq('client_id',cur.id).order('started_at',{ascending:false})).data)||[]}}await loadNut()}
 const arr=a=>Array.isArray(a)?a:[];
